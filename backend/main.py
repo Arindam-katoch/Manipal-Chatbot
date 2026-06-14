@@ -10,6 +10,9 @@ from app.middleware.exceptions import (
 )
 from app.middleware.middleware import APIKeyMiddleware, configure_rate_limiting
 
+# --> ADDED CHAITANYA'S IMPORTS HERE <--
+from app.routers import upload, audio_stream
+
 # Initialize the FastAPI app with metadata from config.py
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -37,6 +40,10 @@ app.add_middleware(
     allow_methods=["*"],  # Allows all HTTP methods (GET, POST, PUT, DELETE)
     allow_headers=["*"],  # Allows all headers
 )
+
+# --> REGISTERED CHAITANYA'S ROUTERS HERE <--
+app.include_router(upload.router, prefix="/api", tags=["Uploads"])
+app.include_router(audio_stream.router, prefix="/api", tags=["Audio"])
 
 # Root Health Check Route
 @app.get("/", tags=["Health"])
