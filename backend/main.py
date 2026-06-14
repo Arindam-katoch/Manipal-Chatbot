@@ -10,6 +10,10 @@ from app.middleware.exceptions import (
 )
 from app.middleware.middleware import APIKeyMiddleware, configure_rate_limiting
 
+
+
+
+
 # Initialize the FastAPI app with metadata from config.py
 app = FastAPI(
     title=settings.PROJECT_NAME,
