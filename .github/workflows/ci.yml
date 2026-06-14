@@ -58,5 +58,5 @@ jobs:
 
       - name: Install dependencies
         run: |
-          cd ai-engine
+          cd ai-engine/ChatBot
           pip install -r requirements.txt
