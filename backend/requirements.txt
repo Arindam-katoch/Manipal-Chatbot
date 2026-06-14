@@ -4,3 +4,10 @@ python-dotenv
 groq
 pdfplumber
 python-multipart
+uvicorn[standard]
+groq
+python-dotenv
+pdfplumber
+python-multipart
+slowapi
+pydantic
