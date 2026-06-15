@@ -11,6 +11,7 @@ from app.middleware.exceptions import (
 from app.middleware.middleware import APIKeyMiddleware, configure_rate_limiting
 
 # --> ADDED CHAITANYA'S IMPORTS HERE <--
+from app.routers import upload, audio_stream
 from app.routers import upload, audio_stream, chat
 from database import engine, Base
 Base.metadata.create_all(bind=engine)
