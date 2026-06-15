@@ -9,7 +9,8 @@ from app.middleware.exceptions import (
     unhandled_exception_handler,
 )
 from app.middleware.middleware import APIKeyMiddleware, configure_rate_limiting
-
+from database import engine, Base
+Base.metadata.create_all(bind=engine)
 
 
 
