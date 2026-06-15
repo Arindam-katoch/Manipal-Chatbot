@@ -1,33 +1,23 @@
-from fastapi import APIRouter
-# from schemas import PlacementStatSchema, AIResponseSchema
+from fastapi import APIRouter, Depends
+from sqlalchemy.orm import Session
+from database import get_db
+from app.crud import placements as crud_placements
 
-router = APIRouter(
-    prefix="/mock",
-    tags=["Mock API"]
-)
+router = APIRouter(prefix="/mock", tags=["API Endpoints"])
 
 @router.get("/placement-stats")
-async def get_mock_placement_stats():
-    """Returns dummy placement data."""
-    return {
-        "status": "success",
-        "data": {
-            "total_students": 500,
-            "placed_students": 420,
-            "top_companies": ["Google", "Microsoft", "Amazon", "LocalTech"],
-            "average_salary_lpa": 12.5,
-            "highest_salary_lpa": 45.0
-        }
-    }
+def get_placement_stats(db: Session = Depends(get_db)):
+    stats = crud_placements.get_placement_stats(db)
+    return {"status": "success", "data": stats}
+
+@router.post("/placement-stats")
+def create_placement_stat(stat_data: dict, db: Session = Depends(get_db)):
+    new_stat = crud_placements.create_placement_stat(db, stat_data)
+    return {"status": "success", "data": new_stat}
 
 @router.post("/ai-chat")
-async def get_mock_ai_response(user_message: dict):
-    """Returns a static AI response."""
+def get_mock_ai_response(user_message: dict):
     return {
         "status": "success",
-        "data": {
-            "role": "ai",
-            "message": "Hello! I am the mock AI. Here are some bullet points to test formatting:\n- Point A\n- Point B",
-            "confidence_score": 0.95
-        }
+        "data": {"role": "ai", "message": "Placeholder.", "confidence_score": 0.95}
     }
