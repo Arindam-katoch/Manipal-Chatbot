@@ -3,6 +3,7 @@
 import { useRef, useEffect } from 'react';
 import ChatInput from '@/components/ChatInput';
 import { useChat } from '@/context/ChatContext';
+import MarkdownRenderer from '@/components/MarkdownRenderer';
 
 export default function Home() {
   const { activeSession, isLoading, sendMessage } = useChat();
@@ -22,29 +23,7 @@ export default function Home() {
     sendMessage(text, activeTool);
   };
 
-  // Helper function to format bot text, supporting bold (**text**) and line breaks
-  const formatText = (text: string) => {
-    return text.split('\n').map((line, i) => {
-      // Bold regex mapping
-      const parts = line.split(/(\*\*.*?\*\*)/g);
-      const content = parts.map((part, j) => {
-        if (part.startsWith('**') && part.endsWith('**')) {
-          return (
-            <strong key={j} className="font-semibold text-slate-800">
-              {part.slice(2, -2)}
-            </strong>
-          );
-        }
-        return part;
-      });
 
-      return (
-        <p key={i} className="text-sm leading-relaxed mb-1 text-slate-700">
-          {content}
-        </p>
-      );
-    });
-  };
 
   return (
     <main className="flex-1 relative flex flex-col h-full bg-slate-50/50 overflow-hidden">
@@ -115,7 +94,7 @@ export default function Home() {
                   {m.sender === 'user' ? (
                     <p className="text-sm leading-relaxed whitespace-pre-wrap">{m.text}</p>
                   ) : (
-                    <div className="space-y-1.5">{formatText(m.text)}</div>
+                    <MarkdownRenderer content={m.text} />
                   )}
                 </div>
               </div>
