@@ -23,8 +23,12 @@ async def chat_endpoint(request: ChatRequest):
                 sources=data.get("sources", [])
             )
     except httpx.RequestError:
-        raise HTTPException(status_code=503, detail="AI Engine is currently unavailable.")
-    except httpx.HTTPStatusError:
-        raise HTTPException(status_code=502, detail="AI Engine returned an invalid response.")
+        raise HTTPException(status_code=503, detail="Unable to connect to AI Engine.")
+    except httpx.HTTPStatusError as e:
+        upstream_status = e.response.status_code if e.response is not None else "unknown"
+        raise HTTPException(
+            status_code=502,
+            detail=f"AI Engine returned HTTP {upstream_status}.",
+        )
     except Exception:
         raise HTTPException(status_code=500, detail="Unexpected error while contacting AI Engine.")
