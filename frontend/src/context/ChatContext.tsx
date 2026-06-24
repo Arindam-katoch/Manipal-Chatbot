@@ -148,7 +148,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
 
     try {
       const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'https://manipal-chatbot.onrender.com';
-      const response = await fetch(`${baseUrl}/mock/ai-chat`, {
+      const response = await fetch(`${baseUrl}/chat`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

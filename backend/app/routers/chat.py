@@ -1,40 +1,37 @@
 import os
+
 import httpx
 from fastapi import APIRouter, HTTPException
+
 from app.schemas.chat import ChatRequest, ChatResponse
 
-# Initialize the router
 router = APIRouter()
 
 @router.post("/chat", response_model=ChatResponse)
 async def chat_endpoint(request: ChatRequest):
-    """
-    Forwards the user's message to the external AI Engine and returns the response.
-    """
-    # Grab the URL from Render's environment variables
-    ai_engine_url = os.getenv("AI_ENGINE_URL")
-    
-    if not ai_engine_url:
-        raise HTTPException(status_code=500, detail="AI_ENGINE_URL environment variable is missing.")
-
-    # Forward the request asynchronously so we don't block the server
-    async with httpx.AsyncClient() as client:
-        try:
-            # Send the payload to the AI team's /chat endpoint
-            response = await client.post(
+    try:
+        ai_engine_url = os.getenv("AI_ENGINE_URL", "http://localhost:8000")
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            res = await client.post(
                 f"{ai_engine_url}/chat",
-                json=request.model_dump()  # Converts the Pydantic model to a standard dictionary
+                json={"question": request.message}
             )
-            response.raise_for_status()  # Catch 4xx or 5xx errors from the AI server
-            
-            # Extract the data
-            ai_data = response.json()
-            
-            # Return it neatly packaged in our expected schema
+            res.raise_for_status()
+            data = res.json()
             return ChatResponse(
-                response=ai_data.get("response", "Error: AI returned an empty response."),
-                sources=ai_data.get("sources", [])
+                response=data.get("answer", "No response from AI engine"),
+                sources=data.get("sources", [])
             )
-            
-        except httpx.RequestError as e:
-            raise HTTPException(status_code=503, detail=f"AI Engine is unreachable: {str(e)}")
+    except httpx.RequestError:
+        raise HTTPException(
+            status_code=503,
+            detail="Unable to connect to AI Engine. Please try again later.",
+        )
+    except httpx.HTTPStatusError as e:
+        upstream_status = e.response.status_code
+        raise HTTPException(
+            status_code=502,
+            detail=f"AI Engine returned HTTP {upstream_status}.",
+        )
+    except Exception:
+        raise HTTPException(status_code=500, detail="Unexpected error while contacting AI Engine.")
