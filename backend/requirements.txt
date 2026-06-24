@@ -11,4 +11,9 @@ pdfplumber
 python-multipart
 slowapi
 pydantic
+<<<<<<< HEAD
+httpx
+=======
+httpx
+>>>>>>> origin/main
 httpx
