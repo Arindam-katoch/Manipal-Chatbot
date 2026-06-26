@@ -271,6 +271,24 @@ class ChatRequest(BaseModel):
     question: str = Field(..., min_length=1)
 
 
+def vapi_voice_config():
+    public_key = os.getenv("NEXT_PUBLIC_VAPI_PUBLIC_KEY")
+    assistant_id = os.getenv("NEXT_PUBLIC_VAPI_ASSISTANT_ID")
+    missing = [
+        key for key, value in {
+            "NEXT_PUBLIC_VAPI_PUBLIC_KEY": public_key,
+            "NEXT_PUBLIC_VAPI_ASSISTANT_ID": assistant_id,
+        }.items()
+        if not value
+    ]
+    return {
+        "enabled": not missing,
+        "public_key": public_key if public_key else None,
+        "assistant_id": assistant_id if assistant_id else None,
+        "missing": missing,
+    }
+
+
 def download_dataset_from_storage():
     if os.path.exists(DATASET_PATH):
         print("dataset.json found locally.")
@@ -2394,6 +2412,24 @@ def home():
         "message": "MIT Bengaluru Chatbot API is running",
         "docs": "/docs",
         "collection": COLLECTION_NAME,
+    }
+
+
+@app.get("/voice/config")
+def voice_config():
+    config = vapi_voice_config()
+    return {
+        "success": config["enabled"],
+        "data": {
+            "provider": "vapi",
+            "activation": "web",
+            "public_key": config["public_key"],
+            "assistant_id": config["assistant_id"],
+            "states": ["connecting", "listening", "speaking", "ended", "error"],
+        } if config["enabled"] else None,
+        "error": None if config["enabled"] else (
+            "Missing Vapi environment variables: " + ", ".join(config["missing"])
+        ),
     }
 
 
