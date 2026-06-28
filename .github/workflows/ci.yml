@@ -1,62 +1,7 @@
-name: CI Pipeline
+On branch devops/github-actions-ci
+Changes not staged for commit:
+  (use "git add <file>..." to update what will be committed)
+  (use "git restore <file>..." to discard changes in working directory)
+        modified:   .github/workflows/ci.yml
 
-on:
-  pull_request:
-    branches: [main]
-
-jobs:
-  frontend-check:
-    name: Frontend Build Check
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-
-      - name: Install dependencies
-        run: |
-          cd frontend
-          npm install
-
-      - name: Build check
-        run: |
-          cd frontend
-          npm run build
-
-  backend-check:
-    name: Backend Build Check
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Install dependencies
-        run: |
-          cd backend
-          pip install -r requirements.txt
-
-  ai-engine-check:
-    name: AI Engine Build Check
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Install dependencies
-        run: |
-          cd ai-engine/ChatBot
-          pip install -r requirements.txt
+no changes added to commit (use "git add" and/or "git commit -a")
