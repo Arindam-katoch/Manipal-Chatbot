@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
 
     const query = latestUserMessage.content;
 
-    // Step 1: Generate a 3072-dimensional embedding of the query
+    // Step 1: Generate a 768-dimensional embedding of the query
     const queryEmbedding = await embedWithBackoff(query);
 
     // Step 2: Execute similarity searches in parallel by fetching the records and scoring in-memory
