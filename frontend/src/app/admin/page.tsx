@@ -311,7 +311,7 @@ export default function AdminDashboard() {
           </h1>
           <div className="flex items-center gap-4">
             <span className="text-xs px-2.5 py-1 rounded-full bg-slate-800 border border-slate-700 text-slate-300 font-medium">
-              Gemini Text Embeddings (3072d)
+              Gemini Text Embeddings (768d)
             </span>
           </div>
         </header>
