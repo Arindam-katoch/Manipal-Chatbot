@@ -25,7 +25,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body
-        className={`${inter.variable} font-sans h-screen overflow-hidden bg-slate-50 text-slate-900 antialiased`}
+        className={`${inter.variable} font-sans h-dvh overflow-hidden bg-slate-50 text-slate-900 antialiased`}
       >
         <ChatProvider>
           <AppShell>{children}</AppShell>

@@ -219,7 +219,7 @@ export default function ChatInput({ onSendMessage, isLoading }: ChatInputProps) 
         </div>
 
         {/* Tool chips row */}
-        <div className="flex items-center gap-1.5 px-3 pb-3 pt-1">
+        <div className="flex flex-wrap items-center gap-1.5 px-3 pb-3 pt-1">
           {tools.map((tool) => (
             <button
               key={tool.id}

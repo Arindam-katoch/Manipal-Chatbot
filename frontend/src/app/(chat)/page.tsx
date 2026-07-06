@@ -61,14 +61,14 @@ export default function Home() {
   return (
     <main className="relative flex h-full flex-1 flex-col overflow-hidden bg-slate-50">
       {/* Messages area */}
-      <div className="scroll-slim flex flex-1 flex-col overflow-y-auto px-6 py-6">
+      <div className="scroll-slim flex flex-1 flex-col overflow-y-auto px-4 py-5 sm:px-6 sm:py-6">
         {messages.length === 0 ? (
           /* ── Welcome view ─────────────────────────────────────────── */
           <div className="relative z-10 mx-auto flex max-w-2xl flex-1 flex-col items-center justify-center animate-fade-up">
             <div className="mb-6 flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-500">
               <Sparkles className="h-7 w-7 text-white" strokeWidth={2} />
             </div>
-            <h1 className="mb-2 text-center text-3xl font-semibold tracking-tight text-slate-900">
+            <h1 className="mb-2 text-center text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl">
               How can I help you today?
             </h1>
             <p className="mb-8 max-w-md text-center text-sm leading-relaxed text-slate-500">
@@ -117,7 +117,7 @@ export default function Home() {
             {messages.map((m) => (
               <div
                 key={m.id}
-                className={`flex max-w-[82%] flex-col animate-fade-up ${
+                className={`flex max-w-[90%] flex-col animate-fade-up sm:max-w-[82%] ${
                   m.sender === "user" ? "items-end self-end" : "items-start self-start"
                 }`}
               >
@@ -189,7 +189,10 @@ export default function Home() {
       </div>
 
       {/* Input bar */}
-      <div className="relative z-10 flex w-full justify-center px-6 pb-6 pt-1">
+      <div
+        className="relative z-10 flex w-full justify-center px-3 pt-1 sm:px-6"
+        style={{ paddingBottom: "max(1.25rem, env(safe-area-inset-bottom))" }}
+      >
         <ChatInput onSendMessage={handleSendMessage} isLoading={isLoading} />
       </div>
     </main>

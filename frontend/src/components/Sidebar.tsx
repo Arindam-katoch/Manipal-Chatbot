@@ -11,7 +11,7 @@ export default function Sidebar() {
 
   return (
     <aside
-      className={`relative z-10 flex h-full shrink-0 flex-col border-r border-slate-200/80 bg-white transition-[width] duration-300 ease-in-out ${
+      className={`relative z-10 hidden h-full shrink-0 flex-col border-r border-slate-200/80 bg-white transition-[width] duration-300 ease-in-out lg:flex ${
         isOpen ? "w-[272px]" : "w-[64px]"
       }`}
     >
