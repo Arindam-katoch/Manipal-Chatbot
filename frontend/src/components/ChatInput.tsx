@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from 'react';
-import { ArrowUp, BookOpen, Briefcase, FileText, Loader2, Mic, Square } from 'lucide-react';
+import { ArrowUp, BookOpen, Briefcase, FileText, Mic, Square } from 'lucide-react';
 
 const tools = [
   {
@@ -50,7 +50,6 @@ export default function ChatInput({ onSendMessage, isLoading }: ChatInputProps) 
   const [inputValue, setInputValue] = useState('');
   const [activeTool, setActiveTool] = useState<string | null>(null);
   const [isRecording, setIsRecording] = useState(false);
-  const [isTranscribing, setIsTranscribing] = useState(false);
   const [micError, setMicError] = useState<string | null>(null);
 
   const recognitionRef = useRef<any>(null);
@@ -67,7 +66,7 @@ export default function ChatInput({ onSendMessage, isLoading }: ChatInputProps) 
   };
 
   const startRecording = () => {
-    if (isRecording || isTranscribing) return;
+    if (isRecording) return;
     setMicError(null);
 
     const SpeechRecognition = typeof window !== 'undefined'
@@ -164,12 +163,10 @@ export default function ChatInput({ onSendMessage, isLoading }: ChatInputProps) 
                 handleSend();
               }
             }}
-            disabled={isLoading || isRecording || isTranscribing}
+            disabled={isLoading || isRecording}
             placeholder={
               isRecording
                 ? 'Listening... Speak now'
-                : isTranscribing
-                ? 'Transcribing...'
                 : activeTool
                 ? `${tools.find(t => t.id === activeTool)?.label} mode — ask anything...`
                 : 'Ask anything about Manipal...'
@@ -182,26 +179,20 @@ export default function ChatInput({ onSendMessage, isLoading }: ChatInputProps) 
           {/* Voice Button */}
           <button
             type="button"
-            disabled={isLoading || isTranscribing}
+            disabled={isLoading}
             onClick={isRecording ? stopRecording : startRecording}
             className={`relative rounded-xl p-2 transition-all ${
               isRecording
                 ? 'animate-pulse cursor-pointer bg-red-500 text-white hover:bg-red-600'
-                : isTranscribing
-                ? 'cursor-wait text-brand-500'
                 : 'cursor-pointer text-slate-400 hover:bg-brand-50 hover:text-brand-600 disabled:cursor-not-allowed disabled:opacity-50'
             }`}
             title={
               isRecording
                 ? 'Stop recording'
-                : isTranscribing
-                ? 'Transcribing…'
                 : 'Start voice input'
             }
           >
-            {isTranscribing ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : isRecording ? (
+            {isRecording ? (
               <Square className="h-4 w-4" fill="currentColor" />
             ) : (
               <Mic className="h-4 w-4" strokeWidth={2} />
