@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from 'react';
+import { Mic, MicOff, PhoneOff, X } from 'lucide-react';
 import type Vapi from '@vapi-ai/web';
 
 /**
@@ -67,6 +68,9 @@ const PHASE_LABEL: Record<Phase, string> = {
   ended: 'Interview ended',
   error: 'Connection error',
 };
+
+/* Shared dark backdrop — same ink family as the app sidebar */
+const OVERLAY_BG = '#0A0D18';
 
 function buildFirstMessage(cfg: InterviewConfig): string {
   const at = cfg.company.trim() ? ` for a role at ${cfg.company.trim()}` : '';
@@ -222,47 +226,52 @@ export default function InterviewLive({ open, onClose }: InterviewLiveProps) {
   // ── Setup view ────────────────────────────────────────────────────────────
   if (!started) {
     const inputClass =
-      'w-full rounded-xl bg-white/5 border border-white/15 px-3.5 py-2.5 text-sm text-white ' +
-      'placeholder-white/30 focus:outline-none focus:border-manipal-orange/70 transition-colors';
+      'w-full rounded-lg bg-white/[0.05] border border-white/10 px-3.5 py-2.5 text-sm text-white ' +
+      'placeholder-white/30 transition-all focus:outline-none focus:border-brand-500/60 focus:ring-4 focus:ring-brand-500/15';
+    const labelClass = 'mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.12em] text-white/40';
     return (
       <div
-        className="fixed inset-0 z-50 flex flex-col items-center text-white overflow-y-auto"
-        style={{ background: 'radial-gradient(120% 90% at 50% 0%, #1a1033 0%, #0b1020 55%, #05060d 100%)' }}
+        className="scroll-slim-dark fixed inset-0 z-50 flex flex-col items-center overflow-y-auto text-white"
+        style={{ background: OVERLAY_BG }}
       >
-        <div className="pointer-events-none absolute -top-24 -left-16 w-96 h-96 rounded-full opacity-25 blur-3xl"
-             style={{ background: '#f37021', animation: 'orbDrift1 14s ease-in-out infinite' }} />
-
-        <div className="w-full max-w-lg px-6 py-8 z-10" style={{ animation: 'ivFadeIn 0.4s ease' }}>
-          <div className="flex items-start justify-between mb-6">
-            <div>
-              <h2 className="text-xl font-semibold">Set up your interview</h2>
-              <p className="text-[12px] text-white/50 mt-1">These preferences are sent to your interviewer.</p>
+        <div className="z-10 w-full max-w-lg px-6 py-10" style={{ animation: 'ivFadeIn 0.4s ease' }}>
+          {/* Header */}
+          <div className="mb-7 flex items-start justify-between">
+            <div className="flex items-center gap-3.5">
+              <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-brand-500">
+                <Mic className="h-5 w-5 text-white" strokeWidth={2.2} />
+              </span>
+              <div>
+                <h2 className="text-xl font-semibold tracking-tight">Interview Studio</h2>
+                <p className="mt-0.5 text-[12px] text-white/45">
+                  Live voice practice — these preferences are sent to your interviewer.
+                </p>
+              </div>
             </div>
             <button
               type="button"
               onClick={end}
-              className="w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 border border-white/15 flex items-center justify-center transition-colors cursor-pointer"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.06] transition-colors hover:bg-white/[0.12]"
               title="Close"
             >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
+              <X className="h-4 w-4" />
             </button>
           </div>
 
-          <div className="space-y-4">
+          {/* Form card */}
+          <div className="space-y-5 rounded-2xl border border-white/[0.08] bg-white/[0.03] p-5 sm:p-6">
             <div>
-              <label className="block text-[11px] uppercase tracking-wide text-white/45 mb-1.5">Interview type</label>
+              <label className={labelClass}>Interview type</label>
               <div className="flex flex-wrap gap-2">
                 {INTERVIEW_TYPES.map((t) => (
                   <button
                     key={t}
                     type="button"
                     onClick={() => updateConfig({ type: t })}
-                    className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-all cursor-pointer ${
+                    className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-all ${
                       config.type === t
-                        ? 'bg-manipal-orange border-manipal-orange text-white'
-                        : 'bg-white/5 border-white/15 text-white/70 hover:border-white/30'
+                        ? 'border-brand-500 bg-brand-500 text-white'
+                        : 'border-white/10 bg-white/[0.04] text-white/70 hover:border-white/25 hover:text-white'
                     }`}
                   >
                     {t}
@@ -272,7 +281,7 @@ export default function InterviewLive({ open, onClose }: InterviewLiveProps) {
             </div>
 
             <div>
-              <label className="block text-[11px] uppercase tracking-wide text-white/45 mb-1.5">Role / Position</label>
+              <label className={labelClass}>Role / Position</label>
               <input
                 className={inputClass}
                 value={config.role}
@@ -283,40 +292,42 @@ export default function InterviewLive({ open, onClose }: InterviewLiveProps) {
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-[11px] uppercase tracking-wide text-white/45 mb-1.5">Field</label>
+                <label className={labelClass}>Field</label>
                 <select
-                  className={`${inputClass} appearance-none cursor-pointer`}
+                  className={`${inputClass} cursor-pointer appearance-none`}
                   value={config.field}
                   onChange={(e) => updateConfig({ field: e.target.value })}
                 >
-                  {FIELDS.map((f) => <option key={f} value={f} className="bg-[#1a1033]">{f}</option>)}
+                  {FIELDS.map((f) => <option key={f} value={f} className="bg-ink-900">{f}</option>)}
                 </select>
               </div>
               <div>
-                <label className="block text-[11px] uppercase tracking-wide text-white/45 mb-1.5">Difficulty</label>
+                <label className={labelClass}>Difficulty</label>
                 <select
-                  className={`${inputClass} appearance-none cursor-pointer`}
+                  className={`${inputClass} cursor-pointer appearance-none`}
                   value={config.difficulty}
                   onChange={(e) => updateConfig({ difficulty: e.target.value })}
                 >
-                  {DIFFICULTIES.map((d) => <option key={d} value={d} className="bg-[#1a1033]">{d}</option>)}
+                  {DIFFICULTIES.map((d) => <option key={d} value={d} className="bg-ink-900">{d}</option>)}
                 </select>
               </div>
             </div>
 
             <div>
-              <label className="block text-[11px] uppercase tracking-wide text-white/45 mb-1.5">Experience level</label>
+              <label className={labelClass}>Experience level</label>
               <select
-                className={`${inputClass} appearance-none cursor-pointer`}
+                className={`${inputClass} cursor-pointer appearance-none`}
                 value={config.experience}
                 onChange={(e) => updateConfig({ experience: e.target.value })}
               >
-                {EXPERIENCE_LEVELS.map((x) => <option key={x} value={x} className="bg-[#1a1033]">{x}</option>)}
+                {EXPERIENCE_LEVELS.map((x) => <option key={x} value={x} className="bg-ink-900">{x}</option>)}
               </select>
             </div>
 
             <div>
-              <label className="block text-[11px] uppercase tracking-wide text-white/45 mb-1.5">Focus areas <span className="normal-case text-white/30">(optional)</span></label>
+              <label className={labelClass}>
+                Focus areas <span className="font-normal normal-case tracking-normal text-white/30">(optional)</span>
+              </label>
               <input
                 className={inputClass}
                 value={config.focus}
@@ -326,7 +337,9 @@ export default function InterviewLive({ open, onClose }: InterviewLiveProps) {
             </div>
 
             <div>
-              <label className="block text-[11px] uppercase tracking-wide text-white/45 mb-1.5">Target company <span className="normal-case text-white/30">(optional)</span></label>
+              <label className={labelClass}>
+                Target company <span className="font-normal normal-case tracking-normal text-white/30">(optional)</span>
+              </label>
               <input
                 className={inputClass}
                 value={config.company}
@@ -340,15 +353,13 @@ export default function InterviewLive({ open, onClose }: InterviewLiveProps) {
             type="button"
             onClick={startInterview}
             disabled={!config.role.trim()}
-            className="mt-7 w-full py-3 rounded-xl bg-manipal-orange hover:bg-orange-600 text-white font-semibold text-sm transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-brand-500 py-3.5 text-sm font-semibold text-white transition-colors hover:bg-brand-600 disabled:cursor-not-allowed disabled:opacity-40"
           >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-            </svg>
-            Start Interview
+            <Mic className="h-4 w-4" strokeWidth={2.2} />
+            Start interview
           </button>
           {!config.role.trim() && (
-            <p className="text-center text-[11px] text-white/40 mt-2">Enter a role to begin.</p>
+            <p className="mt-2.5 text-center text-[11px] text-white/40">Enter a role to begin.</p>
           )}
         </div>
       </div>
@@ -369,38 +380,30 @@ export default function InterviewLive({ open, onClose }: InterviewLiveProps) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex flex-col items-center text-white overflow-hidden"
-      style={{ background: 'radial-gradient(120% 90% at 50% 0%, #1a1033 0%, #0b1020 55%, #05060d 100%)' }}
+      className="fixed inset-0 z-50 flex flex-col items-center overflow-hidden text-white"
+      style={{ background: OVERLAY_BG }}
     >
-      {/* Ambient drifting glows */}
-      <div className="pointer-events-none absolute -top-24 -left-16 w-96 h-96 rounded-full opacity-30 blur-3xl"
-           style={{ background: '#f37021', animation: 'orbDrift1 14s ease-in-out infinite' }} />
-      <div className="pointer-events-none absolute bottom-0 -right-20 w-[28rem] h-[28rem] rounded-full opacity-20 blur-3xl"
-           style={{ background: '#ed1c24', animation: 'orbDrift2 18s ease-in-out infinite' }} />
-
       {/* Top bar */}
-      <div className="w-full flex items-center justify-between px-6 py-4 z-10 shrink-0">
-        <div className="flex items-center gap-2.5">
-          <span className="w-2.5 h-2.5 rounded-full" style={{ background: accent, boxShadow: `0 0 10px ${accent}` }} />
+      <div className="z-10 flex w-full shrink-0 items-center justify-between px-6 py-4">
+        <div className="flex items-center gap-3 rounded-full border border-white/[0.08] bg-white/[0.04] py-1.5 pl-3.5 pr-4">
+          <span className="h-2.5 w-2.5 rounded-full" style={{ background: accent }} />
           <div className="leading-tight">
-            <p className="text-sm font-semibold tracking-wide">Interview Mode · Live</p>
+            <p className="text-[13px] font-semibold tracking-wide">Interview Studio · Live</p>
             <p className="text-[11px] text-white/50">{config.type} · {config.role.trim() || config.field}</p>
           </div>
         </div>
         <button
           type="button"
           onClick={end}
-          className="w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 border border-white/15 flex items-center justify-center transition-colors cursor-pointer"
+          className="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-white/[0.06] transition-colors hover:bg-white/[0.12]"
           title="End interview"
         >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-          </svg>
+          <X className="h-4 w-4" />
         </button>
       </div>
 
       {/* Center: orb + captions */}
-      <div className="flex-1 w-full flex flex-col items-center justify-center px-6 z-10 min-h-0">
+      <div className="z-10 flex min-h-0 w-full flex-1 flex-col items-center justify-center px-6">
         <div className="relative flex items-center justify-center" style={{ width: 260, height: 260 }}>
           {(phase === 'listening' || phase === 'speaking') &&
             [0, 1, 2].map((i) => (
@@ -416,8 +419,7 @@ export default function InterviewLive({ open, onClose }: InterviewLiveProps) {
             className="relative rounded-full"
             style={{
               width: 168, height: 168,
-              background: 'radial-gradient(circle at 35% 28%, #ffd9b0 0%, #f37021 46%, #c92b1e 100%)',
-              boxShadow: `0 0 70px ${accent}aa, inset 0 0 40px rgba(255,255,255,0.12)`,
+              background: '#F37021',
               transform: 'scale(var(--iv-level, 1))',
               transition: 'transform 90ms linear',
               animation:
@@ -428,11 +430,10 @@ export default function InterviewLive({ open, onClose }: InterviewLiveProps) {
           >
             {phase === 'connecting' && (
               <div
-                className="absolute inset-0 rounded-full"
+                className="absolute -inset-3 rounded-full border-2 border-white/15"
                 style={{
-                  background: 'conic-gradient(from 0deg, transparent, rgba(255,255,255,0.55), transparent)',
+                  borderTopColor: 'rgba(255,255,255,0.75)',
                   animation: 'ivSpinSlow 1.3s linear infinite',
-                  mixBlendMode: 'overlay',
                 }}
               />
             )}
@@ -445,7 +446,7 @@ export default function InterviewLive({ open, onClose }: InterviewLiveProps) {
         </p>
 
         {/* Captions */}
-        <div className="mt-4 w-full max-w-2xl text-center min-h-[5.5rem]">
+        <div className="mt-4 min-h-[5.5rem] w-full max-w-2xl text-center">
           {phase === 'error' ? (
             <p className="text-sm text-red-300">{errorMsg}</p>
           ) : phase === 'ended' && !botLine ? (
@@ -453,48 +454,44 @@ export default function InterviewLive({ open, onClose }: InterviewLiveProps) {
           ) : (
             <>
               {botLine && (
-                <p key={botLine} className="text-lg md:text-xl font-light leading-relaxed text-white/95"
+                <p key={botLine} className="text-lg font-light leading-relaxed text-white/95 md:text-xl"
                    style={{ animation: 'ivFadeIn 0.4s ease' }}>
                   {botLine}
                 </p>
               )}
-              {userLine && <p className="mt-3 text-sm text-white/45 italic">“{userLine}”</p>}
+              {userLine && <p className="mt-3 text-sm italic text-white/45">&ldquo;{userLine}&rdquo;</p>}
             </>
           )}
         </div>
       </div>
 
       {/* Controls */}
-      <div className="w-full flex items-center justify-center gap-4 px-6 py-7 z-10 shrink-0">
+      <div className="z-10 flex w-full shrink-0 items-center justify-center gap-4 px-6 py-7">
         <button
           type="button"
           onClick={toggleMute}
           disabled={phase === 'error' || phase === 'ended'}
-          className={`w-16 h-16 rounded-full flex items-center justify-center transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${
-            muted ? 'bg-white/15 hover:bg-white/25 border border-white/20' : 'bg-manipal-orange hover:bg-orange-600'
+          className={`flex h-16 w-16 items-center justify-center rounded-full transition-all disabled:cursor-not-allowed disabled:opacity-40 ${
+            muted
+              ? 'border border-white/15 bg-white/10 hover:bg-white/20'
+              : 'bg-brand-500 hover:bg-brand-600'
           }`}
           title={muted ? 'Unmute microphone' : 'Mute microphone'}
         >
           {muted ? (
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z M17 9l4 4m0-4l-4 4" />
-            </svg>
+            <MicOff className="h-6 w-6" strokeWidth={2} />
           ) : (
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m-4 0h8m-8-8a3 3 0 003 3 3 3 0 003-3V5a3 3 0 10-6 0v6z" />
-            </svg>
+            <Mic className="h-6 w-6" strokeWidth={2} />
           )}
         </button>
 
         <button
           type="button"
           onClick={end}
-          className="w-12 h-12 rounded-full bg-red-500 hover:bg-red-600 flex items-center justify-center transition-colors cursor-pointer"
+          className="flex h-12 w-12 items-center justify-center rounded-full bg-red-500 transition-colors hover:bg-red-600"
           title="End interview"
         >
-          <svg className="w-5 h-5 rotate-[135deg]" fill="currentColor" viewBox="0 0 24 24">
-            <path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.18z" />
-          </svg>
+          <PhoneOff className="h-5 w-5" strokeWidth={2} />
         </button>
       </div>
     </div>

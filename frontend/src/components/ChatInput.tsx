@@ -1,34 +1,23 @@
 "use client";
 
 import { useState, useRef, useEffect } from 'react';
+import { ArrowUp, BookOpen, Briefcase, FileText, Loader2, Mic, Square } from 'lucide-react';
 
 const tools = [
   {
     id: 'resume',
     label: 'Resume Scanner',
-    icon: (
-      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-      </svg>
-    ),
+    icon: <FileText className="h-3.5 w-3.5" strokeWidth={2} />,
   },
   {
     id: 'placement',
     label: 'Placement Q&A',
-    icon: (
-      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-      </svg>
-    ),
+    icon: <Briefcase className="h-3.5 w-3.5" strokeWidth={2} />,
   },
   {
     id: 'study',
     label: 'Study Aid',
-    icon: (
-      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-      </svg>
-    ),
+    icon: <BookOpen className="h-3.5 w-3.5" strokeWidth={2} />,
   },
 ];
 
@@ -64,182 +53,87 @@ export default function ChatInput({ onSendMessage, isLoading }: ChatInputProps) 
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [micError, setMicError] = useState<string | null>(null);
 
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const socketRef = useRef<WebSocket | null>(null);
-  const streamRef = useRef<MediaStream | null>(null);
-  const socketOpenedRef = useRef(false);
-  const transcribeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const recognitionRef = useRef<any>(null);
 
-  // Tear down the mic, the socket and any pending timer. Safe to call repeatedly.
   const releaseResources = () => {
-    if (transcribeTimeoutRef.current) {
-      clearTimeout(transcribeTimeoutRef.current);
-      transcribeTimeoutRef.current = null;
-    }
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-      try { mediaRecorderRef.current.stop(); } catch { /* already stopped */ }
-    }
-    mediaRecorderRef.current = null;
-
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((track) => track.stop());
-      streamRef.current = null;
-    }
-
-    const socket = socketRef.current;
-    socketRef.current = null;
-    if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) {
-      try { socket.close(); } catch { /* already closing */ }
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.stop();
+      } catch (err) {
+        // already stopped
+      }
+      recognitionRef.current = null;
     }
   };
 
-  const finishTranscribing = () => {
-    setIsRecording(false);
-    setIsTranscribing(false);
-    releaseResources();
-  };
-
-  // Pick the best container/codec the browser can actually record.
-  const pickMimeType = (): string => {
-    if (typeof MediaRecorder === 'undefined') return '';
-    const candidates = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/mp4'];
-    return candidates.find((type) => MediaRecorder.isTypeSupported(type)) ?? '';
-  };
-
-  // http(s)://host  →  ws(s)://host/api/audio-stream  (trailing slashes trimmed).
-  const buildWsUrl = (): string => {
-    const baseUrl = (process.env.NEXT_PUBLIC_API_URL || 'https://manipal-chatbot.onrender.com').replace(/\/+$/, '');
-    return baseUrl.replace(/^http/, 'ws') + '/api/audio-stream';
-  };
-
-  const appendTranscript = (text: string) => {
-    const clean = (text || '').trim();
-    if (!clean) return;
-    setInputValue((prev) => {
-      const base = prev.trim();
-      return base ? `${base} ${clean}` : clean;
-    });
-  };
-
-  const startRecording = async () => {
-    // Ignore double clicks while a session is already connecting/recording.
-    if (socketRef.current || isRecording || isTranscribing) return;
+  const startRecording = () => {
+    if (isRecording || isTranscribing) return;
     setMicError(null);
 
-    if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
-      setMicError('Microphone access is not supported in this browser.');
-      return;
-    }
-    if (typeof MediaRecorder === 'undefined') {
-      setMicError('Audio recording is not supported in this browser.');
+    const SpeechRecognition = typeof window !== 'undefined'
+      ? ((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition)
+      : null;
+
+    if (!SpeechRecognition) {
+      setMicError('Speech recognition is not supported in this browser. Please use Chrome or Safari.');
       return;
     }
 
-    let stream: MediaStream;
     try {
-      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    } catch (err) {
-      console.error('Microphone permission denied:', err);
-      setMicError('Microphone permission denied. Please allow mic access and try again.');
-      return;
-    }
-    streamRef.current = stream;
+      const recognition = new SpeechRecognition();
+      recognition.continuous = false;
+      recognition.interimResults = false;
+      recognition.lang = 'en-US';
 
-    const mimeType = pickMimeType();
-    let socket: WebSocket;
-    try {
-      socket = new WebSocket(buildWsUrl());
-    } catch (err) {
-      console.error('Failed to open voice WebSocket:', err);
-      setMicError('Could not connect to the voice service.');
-      releaseResources();
-      return;
-    }
-    socketOpenedRef.current = false;
-    socketRef.current = socket;
+      recognition.onstart = () => {
+        setIsRecording(true);
+      };
 
-    socket.onopen = () => {
-      socketOpenedRef.current = true;
-
-      // Announce the codec so the server can label the buffer correctly.
-      try { socket.send(JSON.stringify({ event: 'start', mimeType })); } catch { /* noop */ }
-
-      const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
-      mediaRecorderRef.current = recorder;
-
-      recorder.ondataavailable = (event) => {
-        if (event.data.size > 0 && socket.readyState === WebSocket.OPEN) {
-          socket.send(event.data);
+      recognition.onresult = (event: any) => {
+        const transcript = event.results[0][0].transcript;
+        if (transcript) {
+          setInputValue((prev) => {
+            const base = prev.trim();
+            return base ? `${base} ${transcript}` : transcript;
+          });
         }
       };
 
-      // stop() flushes the final chunk to ondataavailable first, *then* fires
-      // onstop — so by here the server has every byte and we can signal the end.
-      recorder.onstop = () => {
-        if (socket.readyState === WebSocket.OPEN) {
-          try { socket.send(JSON.stringify({ event: 'stop' })); } catch { /* noop */ }
+      recognition.onerror = (event: any) => {
+        console.error('Speech recognition error:', event.error);
+        if (event.error === 'not-allowed') {
+          setMicError('Microphone permission denied.');
+        } else if (event.error === 'no-speech') {
+          // Ignore no-speech warning to avoid UI noise
+        } else {
+          setMicError(`Speech recognition error: ${event.error}`);
         }
+        setIsRecording(false);
       };
 
-      recorder.start(250); // emit a chunk roughly every 250ms
-      setIsRecording(true);
-    };
+      recognition.onend = () => {
+        setIsRecording(false);
+      };
 
-    socket.onmessage = (event) => {
-      if (typeof event.data !== 'string') return; // we only expect text frames back
-      try {
-        const data = JSON.parse(event.data);
-        if (data.event === 'error') {
-          setMicError(typeof data.message === 'string' ? data.message : 'Transcription failed.');
-          finishTranscribing();
-          return;
-        }
-        const text = data.transcript ?? data.text;
-        if (typeof text === 'string') appendTranscript(text);
-        if (data.event === 'done') finishTranscribing();
-      } catch {
-        appendTranscript(event.data); // tolerate a plain-string transcript
-      }
-    };
-
-    socket.onerror = (err) => {
-      console.error('Voice WebSocket error:', err);
-    };
-
-    socket.onclose = () => {
-      // If the socket never opened, the endpoint is unreachable — surface that.
-      if (!socketOpenedRef.current) {
-        setMicError('Could not reach the voice service. Please try again later.');
-      }
-      finishTranscribing();
-    };
+      recognitionRef.current = recognition;
+      recognition.start();
+    } catch (err: any) {
+      console.error('Failed to start speech recognition:', err);
+      setMicError('Failed to start voice input.');
+      setIsRecording(false);
+    }
   };
 
   const stopRecording = () => {
     if (!isRecording) return;
-
-    // Hand off to the "transcribing" phase; the transcript arrives over the socket.
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.stop();
+      } catch (err) {
+        console.error('Failed to stop speech recognition:', err);
+      }
+    }
     setIsRecording(false);
-    setIsTranscribing(true);
-
-    // Stopping the recorder flushes the last chunk and triggers onstop, which
-    // sends the {event:'stop'} marker. We keep the socket open to receive the
-    // transcript — releaseResources() closes it once we're done.
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-      try { mediaRecorderRef.current.stop(); } catch { /* already stopped */ }
-    }
-
-    // Release the mic right away; we don't need it during transcription.
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((track) => track.stop());
-      streamRef.current = null;
-    }
-
-    // Safety net so the UI never hangs if the server goes silent.
-    transcribeTimeoutRef.current = setTimeout(() => {
-      setMicError((prev) => prev ?? 'The voice service did not respond in time.');
-      finishTranscribing();
-    }, 15000);
   };
 
   // Release everything if the component unmounts mid-recording.
@@ -257,15 +151,10 @@ export default function ChatInput({ onSendMessage, isLoading }: ChatInputProps) 
   };
 
   return (
-    <div className="w-full max-w-2xl mx-auto shrink-0">
-      <div
-        className="bg-white rounded-2xl border border-gray-200 overflow-hidden transition-all"
-        style={{
-          boxShadow: '0 2px 16px rgba(243,112,33,0.07), 0 1px 4px rgba(0,0,0,0.05)',
-        }}
-      >
+    <div className="mx-auto w-full max-w-3xl shrink-0">
+      <div className="overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-input transition-all focus-within:border-brand-300 focus-within:ring-4 focus-within:ring-brand-500/10">
         {/* Text input row */}
-        <div className="flex items-center px-4 pt-3 pb-2 gap-2">
+        <div className="flex items-center gap-2 px-4 pb-2 pt-3.5">
           <input
             type="text"
             value={inputValue}
@@ -285,8 +174,8 @@ export default function ChatInput({ onSendMessage, isLoading }: ChatInputProps) 
                 ? `${tools.find(t => t.id === activeTool)?.label} mode — ask anything...`
                 : 'Ask anything about Manipal...'
             }
-            className={`flex-1 text-sm text-gray-700 bg-transparent focus:outline-none placeholder-gray-300 py-1.5 disabled:opacity-50 ${
-              isRecording ? 'text-red-500 font-medium animate-pulse' : ''
+            className={`flex-1 bg-transparent py-1.5 text-sm text-slate-800 placeholder-slate-400 focus:outline-none disabled:opacity-50 ${
+              isRecording ? 'animate-pulse font-medium text-red-500' : ''
             }`}
           />
 
@@ -295,12 +184,12 @@ export default function ChatInput({ onSendMessage, isLoading }: ChatInputProps) 
             type="button"
             disabled={isLoading || isTranscribing}
             onClick={isRecording ? stopRecording : startRecording}
-            className={`p-1.5 rounded-lg transition-all relative ${
+            className={`relative rounded-xl p-2 transition-all ${
               isRecording
-                ? 'bg-red-500 text-white hover:bg-red-600 animate-pulse cursor-pointer'
+                ? 'animate-pulse cursor-pointer bg-red-500 text-white hover:bg-red-600'
                 : isTranscribing
-                ? 'text-manipal-orange cursor-wait'
-                : 'text-gray-400 hover:text-manipal-orange hover:bg-orange-50 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed'
+                ? 'cursor-wait text-brand-500'
+                : 'cursor-pointer text-slate-400 hover:bg-brand-50 hover:text-brand-600 disabled:cursor-not-allowed disabled:opacity-50'
             }`}
             title={
               isRecording
@@ -311,22 +200,14 @@ export default function ChatInput({ onSendMessage, isLoading }: ChatInputProps) 
             }
           >
             {isTranscribing ? (
-              <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth={4} />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-              </svg>
+              <Loader2 className="h-4 w-4 animate-spin" />
             ) : isRecording ? (
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 10h6v4H9z" />
-              </svg>
+              <Square className="h-4 w-4" fill="currentColor" />
             ) : (
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-              </svg>
+              <Mic className="h-4 w-4" strokeWidth={2} />
             )}
             {isRecording && (
-              <span className="absolute inset-0 rounded-lg bg-red-500 opacity-75 animate-ping -z-10" />
+              <span className="absolute inset-0 -z-10 animate-ping rounded-xl bg-red-500 opacity-75" />
             )}
           </button>
 
@@ -335,30 +216,29 @@ export default function ChatInput({ onSendMessage, isLoading }: ChatInputProps) 
             type="button"
             onClick={handleSend}
             disabled={!inputValue.trim() || isLoading}
-            className={`p-1.5 rounded-lg transition-all cursor-pointer ${
+            className={`rounded-xl p-2 transition-all ${
               inputValue.trim() && !isLoading
-                ? 'bg-manipal-orange text-white shadow-sm hover:bg-orange-600'
-                : 'text-gray-300 cursor-default disabled:opacity-50 disabled:cursor-not-allowed'
+                ? 'cursor-pointer bg-brand-500 text-white hover:bg-brand-600'
+                : 'cursor-default bg-slate-100 text-slate-300'
             }`}
+            title="Send message"
           >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h14M12 5l7 7-7 7" />
-            </svg>
+            <ArrowUp className="h-4 w-4" strokeWidth={2.4} />
           </button>
         </div>
 
-        {/* Tool chips row — Gemini-style */}
-        <div className="flex items-center gap-1.5 px-3 pb-3 pt-0.5">
+        {/* Tool chips row */}
+        <div className="flex items-center gap-1.5 px-3 pb-3 pt-1">
           {tools.map((tool) => (
             <button
               key={tool.id}
               type="button"
               disabled={isLoading}
               onClick={() => handleToolClick(tool.id)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
+              className={`flex cursor-pointer items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-all disabled:cursor-not-allowed disabled:opacity-50 ${
                 activeTool === tool.id
-                  ? 'bg-orange-50 border-orange-200 text-manipal-orange'
-                  : 'bg-gray-50 border-gray-200 text-gray-500 hover:border-orange-200 hover:text-manipal-orange hover:bg-orange-50'
+                  ? 'border-brand-200 bg-brand-50 text-brand-700'
+                  : 'border-slate-200 bg-slate-50 text-slate-500 hover:border-brand-200 hover:bg-brand-50 hover:text-brand-600'
               }`}
             >
               {tool.icon}
@@ -368,11 +248,11 @@ export default function ChatInput({ onSendMessage, isLoading }: ChatInputProps) 
         </div>
       </div>
       {micError ? (
-        <p className="text-center text-[10px] text-red-400 mt-2" role="alert">
+        <p className="mt-2 text-center text-[11px] text-red-500" role="alert">
           {micError}
         </p>
       ) : (
-        <p className="text-center text-[10px] text-gray-300 mt-2">
+        <p className="mt-2 text-center text-[11px] text-slate-400">
           Campus AI can make mistakes. Verify important information.
         </p>
       )}
