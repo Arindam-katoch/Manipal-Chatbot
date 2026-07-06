@@ -210,7 +210,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             {!collapsed && (
               <span className="min-w-0 flex-1 leading-tight">
                 <span className="block truncate text-[13px] font-medium text-white">
-                  {adminMode ? "Placement Cell" : "Student"}
+                  {adminMode ? "Administrator" : "Student"}
                 </span>
                 <span className="block truncate text-[11px] text-slate-500">
                   {adminMode ? "Staff access" : "Class of 2025 · CSE"}
@@ -262,7 +262,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         {adminMode && (
           <div className="flex shrink-0 items-center gap-2 border-b border-amber-200/70 bg-amber-50 px-6 py-2 text-[12px] font-medium text-amber-800">
             <ShieldCheck className="h-3.5 w-3.5 shrink-0" />
-            Internal tools for placement-cell staff. Students never see this area.
+            Internal tools for staff. Students never see this area.
           </div>
         )}
 

@@ -9,3 +9,4 @@ venv/
 backend-old/
 *.log
 backend/placements.db
+backend/placements.db
