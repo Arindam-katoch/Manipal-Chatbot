@@ -40,11 +40,23 @@ export type QuestionTag =
 /* ─── Data ───────────────────────────────────────────────────────────── */
 
 export const stats = [
-  { label: "Students Placed", value: "847", sub: "Class of 2024" },
-  { label: "Avg. Package", value: "₹12.4L", sub: "Per annum" },
-  { label: "Highest Package", value: "₹48L", sub: "Google — 2024" },
-  { label: "Companies Visited", value: "134", sub: "This year" },
+  { label: "Students placed", value: "847", sub: "Class of 2024" },
+  { label: "Average package", value: "₹12.4L", sub: "Per annum" },
+  { label: "Highest package", value: "₹48L", sub: "Google — 2024" },
+  { label: "Companies visited", value: "134", sub: "This year" },
 ];
+
+/** Quick lookup for company logo initials (e.g. "GS" for Goldman Sachs). */
+export const companyLogos: Record<CompanyName, string> = {
+  Google: "G",
+  Microsoft: "Ms",
+  "Goldman Sachs": "GS",
+  Amazon: "Az",
+  Deloitte: "D",
+  "JP Morgan": "JP",
+  Infosys: "In",
+  McKinsey: "Mc",
+};
 
 export const companies: {
   name: CompanyName;
@@ -122,12 +134,12 @@ export const tagColors: Record<QuestionTag, string> = {
 };
 
 export const calColors: Record<CalendarColor, string> = {
-  blue: "bg-blue-50 border-blue-200 text-blue-700",
-  green: "bg-green-50 border-green-200 text-green-700",
-  orange: "bg-orange-50 border-orange-200 text-orange-700",
-  purple: "bg-purple-50 border-purple-200 text-purple-700",
-  red: "bg-red-50 border-red-200 text-red-700",
-  gray: "bg-gray-50 border-gray-200 text-gray-600",
+  blue: "bg-sky-50 text-sky-700 ring-sky-200",
+  green: "bg-emerald-50 text-emerald-700 ring-emerald-200",
+  orange: "bg-brand-50 text-brand-700 ring-brand-200",
+  purple: "bg-violet-50 text-violet-700 ring-violet-200",
+  red: "bg-rose-50 text-rose-700 ring-rose-200",
+  gray: "bg-slate-50 text-slate-600 ring-slate-200",
 };
 
 export const logoColors: Record<CompanyName, string> = {

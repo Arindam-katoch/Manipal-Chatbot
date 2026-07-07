@@ -1,4 +1,3 @@
-python
 import json
 import os
 import re
@@ -13,8 +12,7 @@ from fastapi import FastAPI, HTTPException, Request, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
-from google import genai
-from google.genai import types
+from sentence_transformers import SentenceTransformer
 
 from dotenv import load_dotenv
 from groq import Groq
@@ -25,12 +23,11 @@ groq_client = Groq(
     api_key=os.getenv("GROQ_API_KEY")
 )
 
-client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATASET_PATH = os.path.join(BASE_DIR, "dataset.json")
 COLLECTION_NAME = "mit_bengaluru_data"
-EMBEDDING_MODEL = "gemini-embedding-2"
+EMBEDDING_MODEL = "all-MiniLM-L6-v2"
 GROQ_MODEL = "llama-3.1-8b-instant"
 GREETING_RESPONSE = "Hello! How can I help you with MIT Bengaluru?"
 USER_RATE_LIMIT = 10
@@ -219,6 +216,7 @@ MIT_SPECIFIC_TERMS = {
     "workshops",
 }
 
+
 app = FastAPI(title="MIT Bengaluru RAG Chatbot API")
 allowed_origins = [
     origin.strip()
@@ -233,16 +231,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-def get_gemini_query_embedding(text):
-    response = client.models.embed_content(
-        model="gemini-embedding-2",
-        contents=text,
-        config=types.EmbedContentConfig(
-            task_type="RETRIEVAL_QUERY",
-            output_dimensionality=768
-        )
-    )
-    return response.embeddings[0].values
+embedding_model = SentenceTransformer(EMBEDDING_MODEL)
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY")
@@ -277,8 +266,28 @@ pagination_state = {
 request_timestamps_by_user = {}
 response_cache = {}
 
+
 class ChatRequest(BaseModel):
     question: str = Field(..., min_length=1)
+
+
+def vapi_voice_config():
+    public_key = os.getenv("NEXT_PUBLIC_VAPI_PUBLIC_KEY")
+    assistant_id = os.getenv("NEXT_PUBLIC_VAPI_ASSISTANT_ID")
+    missing = [
+        key for key, value in {
+            "NEXT_PUBLIC_VAPI_PUBLIC_KEY": public_key,
+            "NEXT_PUBLIC_VAPI_ASSISTANT_ID": assistant_id,
+        }.items()
+        if not value
+    ]
+    return {
+        "enabled": not missing,
+        "public_key": public_key if public_key else None,
+        "assistant_id": assistant_id if assistant_id else None,
+        "missing": missing,
+    }
+
 
 def download_dataset_from_storage():
     if os.path.exists(DATASET_PATH):
@@ -297,11 +306,13 @@ def download_dataset_from_storage():
         print(f"WARNING: Could not download dataset.json from Supabase Storage: {e}")
         print("Rule-based lists and faculty search might not work.")
 
+
 def verify_supabase_connection():
     if not supabase_client:
         print("WARNING: Supabase connection is not verified (keys missing).")
         return
     try:
+        # Check if table exists and has data
         res = supabase_client.table("mit_bengaluru_data").select("id").limit(1).execute()
         print("Supabase connection verified. Table 'mit_bengaluru_data' is accessible.")
         if not res.data:
@@ -310,8 +321,10 @@ def verify_supabase_connection():
         print(f"WARNING: Failed to connect to Supabase or query table: {e}")
         print("Please check your database connection, SQL schema settings, and API keys.")
 
+
 download_dataset_from_storage()
 verify_supabase_connection()
+
 
 def load_dataset_chunks():
     if not supabase_client:
@@ -336,8 +349,10 @@ def load_dataset_chunks():
         print("Failed to load dataset chunks from Supabase:", e)
         return []
 
+
 def load_placement_dataset_chunks():
     return load_dataset_chunks()
+
 
 def is_simple_greeting(question):
     normalized = re.sub(r"[^a-z\s]", "", question.lower()).strip()
@@ -349,6 +364,7 @@ def is_simple_greeting(question):
         "good morning",
         "good evening",
     }
+
 
 def is_faculty_query(question):
     normalized = question.lower().strip()
@@ -376,17 +392,21 @@ def is_faculty_query(question):
         or " dr." in f" {normalized}"
     )
 
+
 def is_placement_query(question):
     normalized = question.lower()
     return any(term in normalized for term in PLACEMENT_QUERY_TERMS)
+
 
 def is_numerical_query(question):
     normalized = question.lower()
     return any(term in normalized for term in NUMERICAL_QUERY_TERMS)
 
+
 def is_aggregation_query(question):
     normalized = question.lower()
     return any(term in normalized for term in AGGREGATION_QUERY_TERMS)
+
 
 def is_academic_program_query(question):
     normalized = question.lower()
@@ -394,6 +414,7 @@ def is_academic_program_query(question):
         any(term in normalized for term in ["course", "courses", "program", "programs", "branch", "branches"])
         and any(term in normalized for term in ["mit", "blr", "bengaluru", "available", "offered"])
     )
+
 
 def is_role_lookup_query(question):
     normalized = question.lower()
@@ -413,6 +434,7 @@ def is_role_lookup_query(question):
             "coordinator of",
         ]
     )
+
 
 def person_query_name(question):
     match = re.match(
@@ -436,11 +458,13 @@ def person_query_name(question):
         return ""
     return name
 
+
 def normalize_person_name(name):
     key = re.sub(r"^(?:dr|mr|ms|prof)\.?\s+", "", (name or "").lower()).strip()
     key = re.sub(r"[^a-z0-9\s]", " ", key)
     key = re.sub(r"\s+", " ", key).strip()
     return key
+
 
 def mit_person_entity_match_found(person_name):
     query_key = normalize_person_name(person_name)
@@ -458,6 +482,7 @@ def mit_person_entity_match_found(person_name):
         if all(term in person_terms for term in query_terms):
             return True
     return False
+
 
 def is_mit_specific_query(question):
     normalized = re.sub(r"[^a-z0-9\s.-]", " ", question.lower())
@@ -500,6 +525,7 @@ def is_mit_specific_query(question):
         ]
     )
 
+
 def expand_department_terms(question):
     normalized = question.lower()
     mapping = {
@@ -518,6 +544,7 @@ def expand_department_terms(question):
         terms.extend(["cse", "computer science", "computer science & engineering"])
     return terms
 
+
 def is_list_style_query(question):
     normalized = question.lower()
     return any(
@@ -533,6 +560,7 @@ def is_list_style_query(question):
         ]
     )
 
+
 def aggregation_type(question):
     normalized = question.lower()
     if any(term in normalized for term in ["placement", "placed", "package", "ctc", "student"]):
@@ -545,15 +573,18 @@ def aggregation_type(question):
         return "faculty_staff"
     return "general"
 
+
 def clean_text(text):
     text = re.sub(r"\s+", " ", text or "").strip()
     return text
+
 
 def truncate_text(text, max_chars):
     text = clean_text(text)
     if len(text) <= max_chars:
         return text
     return text[: max_chars - 3].rsplit(" ", 1)[0] + "..."
+
 
 def name_terms_from_question(question):
     stop_words = {
@@ -569,6 +600,7 @@ def name_terms_from_question(question):
     words = re.findall(r"[a-z0-9]+", question.lower())
     words = [word for word in words if word not in stop_words and word != "dr"]
     return words
+
 
 def query_terms(question):
     stop_words = {
@@ -605,6 +637,7 @@ def query_terms(question):
         terms.extend(FACULTY_CATEGORY_TERMS)
     return list(dict.fromkeys(terms))
 
+
 def exact_phrase_search(question, limit=5):
     phrase = clean_text(question).lower()
     if len(phrase) < 4:
@@ -618,6 +651,7 @@ def exact_phrase_search(question, limit=5):
         if len(matches) >= limit:
             break
     return matches
+
 
 def keyword_search(question, limit=10):
     terms = query_terms(question)
@@ -658,8 +692,9 @@ def keyword_search(question, limit=10):
 
         scored_matches.append((score, chunk))
 
-        scored_matches.sort(key=lambda item: item[0], reverse=True)
+    scored_matches.sort(key=lambda item: item[0], reverse=True)
     return [chunk for _, chunk in scored_matches[:limit]]
+
 
 def exact_faculty_match(question):
     if not is_faculty_query(question):
@@ -697,6 +732,7 @@ def exact_faculty_match(question):
     scored_matches.sort(key=lambda item: item[0], reverse=True)
     return scored_matches[0][1]
 
+
 def placement_keyword_search(limit=8):
     scored_matches = []
 
@@ -727,6 +763,7 @@ def placement_keyword_search(limit=8):
     scored_matches.sort(key=lambda item: item[0], reverse=True)
     return [chunk for _, chunk in scored_matches[:limit]]
 
+
 def find_relevant_snippet(document, question, max_chars=MAX_FACULTY_SNIPPET_CHARS):
     text = clean_text(document)
     if len(text) <= max_chars:
@@ -753,6 +790,7 @@ def find_relevant_snippet(document, question, max_chars=MAX_FACULTY_SNIPPET_CHAR
     end = min(len(text), match_index + max_chars - 120)
     snippet = text[start:end].strip()
     return truncate_text(snippet, max_chars)
+
 
 def extract_faculty_profile_fields(content):
     lines = [clean_text(line.strip("#*=:- ")) for line in content.splitlines()]
@@ -789,11 +827,13 @@ def extract_faculty_profile_fields(content):
         fields["Role"] = fields["Designation"]
     return fields
 
+
 def format_faculty_profile_fields(fields):
     if not fields:
         return ""
     order = ["Name", "Designation", "Department/School", "Role", "Expertise/Research", "Email/Contact"]
     return "\n".join(f"{key}: {fields[key]}" for key in order if fields.get(key))
+
 
 def faculty_profile_direct_answer(chunk):
     if not chunk or chunk.get("knowledge_type") != "faculty":
@@ -813,6 +853,7 @@ def faculty_profile_direct_answer(chunk):
     if fields.get("Email/Contact"):
         sentences.append(f"The listed email/contact is {fields['Email/Contact']}.")
     return " ".join(sentences)
+
 
 def chunks_from_results(results, limit=5):
     documents = results.get("documents", [[]])[0]
@@ -837,9 +878,11 @@ def chunks_from_results(results, limit=5):
 
     return chunks
 
+
 def normalized_lookup_text(text):
     text = re.sub(r"[^a-z0-9\s]", " ", (text or "").lower())
     return re.sub(r"\s+", " ", text).strip()
+
 
 def direct_chroma_text_search(collection, question, limit=5):
     person_name = person_query_name(question)
@@ -861,8 +904,9 @@ def direct_chroma_text_search(collection, question, limit=5):
         return []
 
     try:
+        # Build OR filter queries for database-side string matching
         filter_conditions = []
-        for term in terms[:5]:
+        for term in terms[:5]: # Limit to avoid overlong query parameters
             filter_conditions.append(f"content.ilike.%{term}%")
             filter_conditions.append(f"title.ilike.%{term}%")
         
@@ -918,6 +962,7 @@ def direct_chroma_text_search(collection, question, limit=5):
     scored_matches.sort(key=lambda item: item[0], reverse=True)
     return [chunk for _, chunk in scored_matches[:limit]]
 
+
 def needs_direct_text_fallback(question, vector_chunks):
     if not vector_chunks:
         return True
@@ -931,12 +976,14 @@ def needs_direct_text_fallback(question, vector_chunks):
     top_distance = vector_chunks[0].get("distance")
     return isinstance(top_distance, (int, float)) and top_distance > 1.2
 
+
 def chunk_key(chunk):
     return (
         chunk.get("chunk_id") or "",
         chunk.get("title") or "",
         chunk.get("url") or "",
     )
+
 
 def placement_boost_score(chunk):
     title = chunk.get("title", "").lower()
@@ -954,6 +1001,7 @@ def placement_boost_score(chunk):
     score += sum(10 for term in PLACEMENT_PRIORITY_URL_TERMS if term in url)
     return score
 
+
 def normalize_package_value(value_text):
     value = float(value_text)
     if 100 <= value <= 999 and value.is_integer():
@@ -964,7 +1012,9 @@ def normalize_package_value(value_text):
         value = float(f"{digits[0]}.{digits[1:]}")
     return value
 
+
 def infer_student_and_program(text, match_start):
+    # Try structured key-value parsing first (e.g. from CSV, XLSX, SQLite DB)
     student_match = re.search(r"(?:student name|student|name)\s*:\s*([^,\n|]+)", text, re.I)
     program_match = re.search(r"(?:branch|program|department|specialization)\s*:\s*([^,\n|]+)", text, re.I)
     
@@ -974,6 +1024,7 @@ def infer_student_and_program(text, match_start):
     if student or program:
         return clean_student_name(student) or "Not specified", program or "Not specified"
 
+    # Fall back to original line-by-line proximity search
     prefix = text[:match_start]
     lines = [line.strip() for line in prefix.splitlines() if line.strip()]
     recent_lines = lines[-8:]
@@ -991,11 +1042,13 @@ def infer_student_and_program(text, match_start):
 
     return clean_student_name(student) or "Not specified", program or "Not specified"
 
+
 def clean_student_name(name):
     name = clean_text(name)
     if re.match(r"^[A-Z][A-Z][a-z]", name):
         name = name[1:]
     return name
+
 
 def extract_package_records(chunks):
     records = []
@@ -1022,8 +1075,10 @@ def extract_package_records(chunks):
     records.sort(key=lambda record: record["package"], reverse=True)
     return records
 
+
 def format_lpa(value):
     return f"{value:g} LPA"
+
 
 def build_package_summary(records):
     if not records:
@@ -1041,6 +1096,7 @@ def build_package_summary(records):
         )
     return "\n".join(lines).strip()
 
+
 def direct_placement_answer(question):
     if not is_placement_query(question):
         return ""
@@ -1051,6 +1107,7 @@ def direct_placement_answer(question):
 
     records = extract_package_records(chunks)
     
+    # Check if the query specifically mentions any student name from the records
     normalized_question = question.lower()
     student_matches = []
     seen_students = set()
@@ -1096,6 +1153,7 @@ def direct_placement_answer(question):
 
     return "\n".join(lines)
 
+
 def package_records_for_person(records, person_name):
     if not person_name:
         return []
@@ -1107,6 +1165,7 @@ def package_records_for_person(records, person_name):
         or all(term in normalize_person_name(record.get("student", "")).split() for term in person_key.split())
     ]
 
+
 def person_placement_answer(records, person_name):
     matches = package_records_for_person(records, person_name)
     if not matches:
@@ -1116,6 +1175,7 @@ def person_placement_answer(records, person_name):
         f"Based on the available MIT Bengaluru placement data, {record['student']} is listed as a "
         f"{record['program']} student with a CTC/package of {format_lpa(record['package'])}."
     )
+
 
 def faculty_aggregation_chunks():
     chunks = []
@@ -1135,6 +1195,7 @@ def faculty_aggregation_chunks():
         if any(term in searchable for term in faculty_markers):
             chunks.append(chunk)
     return chunks
+
 
 def extract_person_entities(chunks):
     people = {}
@@ -1167,11 +1228,13 @@ def extract_person_entities(chunks):
 
     return list(people.values())
 
+
 def all_classified_people():
     global classified_people_cache
     if classified_people_cache is None:
         classified_people_cache = extract_person_entities(placement_dataset_chunks)
     return classified_people_cache
+
 
 def classify_person_entity(role, context):
     role_text = (role or "").lower()
@@ -1201,6 +1264,7 @@ def classify_person_entity(role, context):
     if "chairperson" in text or "committee" in text or re.search(r"\bmember\b", text):
         return "Committee Member"
     return "Unclassified"
+
 
 def faculty_entities():
     global faculty_entities_cache
@@ -1232,6 +1296,7 @@ def faculty_entities():
     faculty_entities_cache = faculty
     return faculty
 
+
 def entity_counts():
     committee_chunks = [
         chunk
@@ -1253,6 +1318,7 @@ def entity_counts():
     }
     return counts
 
+
 def requested_range(question, default_page_size=50):
     normalized = question.lower()
     explicit = re.search(r"\b(\d+)\s*(?:-|to)\s*(\d+)\b", normalized)
@@ -1272,6 +1338,7 @@ def requested_range(question, default_page_size=50):
 
     return 0, default_page_size
 
+
 def pagination_entity_type(question):
     normalized = question.lower()
     if "faculty" in normalized or "professor" in normalized:
@@ -1290,12 +1357,14 @@ def pagination_entity_type(question):
         return pagination_state.get("entity_type")
     return None
 
+
 def is_pagination_request(question):
     normalized = question.lower()
     return bool(
         re.search(r"\b(\d+)\s*(?:-|to)\s*(\d+)\b", normalized)
         or re.search(r"\b(next|more|continue|show more|show next)\b", normalized)
     )
+
 
 def pagination_items(entity_type, question):
     if entity_type == "faculty":
@@ -1331,6 +1400,7 @@ def pagination_items(entity_type, question):
         ]
     return []
 
+
 def save_pagination_state(entity_type, items, start, end, page_size):
     pagination_state.update(
         {
@@ -1343,6 +1413,7 @@ def save_pagination_state(entity_type, items, start, end, page_size):
     )
     print("pagination state saved:", True)
     print("pagination entity type:", entity_type)
+
 
 def format_paginated_items(title, items, question, entity_type, page_size=50):
     start, end = requested_range(question, page_size)
@@ -1368,6 +1439,7 @@ def format_paginated_items(title, items, question, entity_type, page_size=50):
         lines.append(f"{index}. {entity['name']}{role}")
     return "\n".join(lines)
 
+
 def format_entity_page(title, entities, question, page_size=50):
     entity_type = pagination_entity_type(question) or aggregation_type(question)
     if entity_type == "faculty_staff":
@@ -1375,6 +1447,7 @@ def format_entity_page(title, entities, question, page_size=50):
     elif entity_type == "placement_students":
         entity_type = "placed_students"
     return format_paginated_items(title, entities, question, entity_type, page_size)
+
 
 def direct_pagination_answer(question):
     if not is_pagination_request(question):
@@ -1389,6 +1462,7 @@ def direct_pagination_answer(question):
         return ""
     title = f"Here are the requested {entity_type.replace('_', ' ')} records:"
     return format_paginated_items(title, items, question, entity_type, pagination_state.get("page_size", 50))
+
 
 def extract_recruiter_entities(chunks):
     recruiters = set()
@@ -1406,6 +1480,7 @@ def extract_recruiter_entities(chunks):
                         recruiters.add(candidate)
     return sorted(recruiters)
 
+
 def clean_academic_value(value):
     value = clean_text(value)
     value = re.sub(r"\s*[:|].*$", "", value)
@@ -1418,6 +1493,7 @@ def clean_academic_value(value):
         value = value.rstrip(")")
     return value
 
+
 def normalize_program_type(text):
     if re.search(r"\b(?:b\.?\s*tech|btech|bachelor of technology)\b", text, re.I):
         return "B.Tech"
@@ -1428,6 +1504,7 @@ def normalize_program_type(text):
     if re.search(r"\b(?:ph\.?\s*d|phd|doctoral)\b", text, re.I):
         return "Ph.D"
     return ""
+
 
 def program_record(program_type, department, specialization=""):
     department = clean_academic_value(department)
@@ -1441,6 +1518,7 @@ def program_record(program_type, department, specialization=""):
         "department": department,
         "specialization": specialization,
     }
+
 
 def is_valid_program_department(department):
     if not 3 <= len(department) <= 90:
@@ -1464,6 +1542,7 @@ def is_valid_program_department(department):
             re.I,
         )
     )
+
 
 def parse_program_candidate(text):
     program_type = normalize_program_type(text)
@@ -1496,6 +1575,7 @@ def parse_program_candidate(text):
 
     return program_record(program_type, candidate, specialization)
 
+
 def add_program_record(records, record):
     if not record:
         return
@@ -1519,6 +1599,7 @@ def add_program_record(records, record):
     )
     records[key] = record
 
+
 def course_title_candidates(text):
     candidates = []
     for raw_line in text.splitlines():
@@ -1532,6 +1613,7 @@ def course_title_candidates(text):
         ):
             candidates.append(line)
     return candidates
+
 
 def extract_program_records():
     records = {}
@@ -1580,6 +1662,7 @@ def extract_program_records():
         key=lambda item: (item["program_type"], item["department"], item.get("specialization", "")),
     )
 
+
 def extract_academic_units():
     units = {"Department": {}, "School": {}}
     chunks = placement_dataset_chunks or dataset_chunks
@@ -1619,6 +1702,7 @@ def extract_academic_units():
         for unit_type, values in units.items()
         if values
     }
+
 
 def academic_program_answer(question):
     programs = extract_program_records()
@@ -1676,6 +1760,7 @@ def academic_program_answer(question):
     print("returned range:", f"1-{min(len(course_entities), 50)}")
     print("next page available:", len(course_entities) > 50)
     return "\n".join(lines)
+
 
 def role_lookup_answer(question):
     normalized = question.lower()
@@ -1839,6 +1924,7 @@ def role_lookup_answer(question):
         return f"{match['name']} is listed as {', '.join(match['roles'])} in the available MIT Bengaluru data."
     return ""
 
+
 def committee_chunks():
     return [
         chunk
@@ -1849,6 +1935,7 @@ def committee_chunks():
             re.I,
         )
     ]
+
 
 def extract_committee_names(chunks):
     names = {}
@@ -1869,6 +1956,7 @@ def extract_committee_names(chunks):
                 names[key] = name
     return sorted(names.values())
 
+
 def clean_committee_name(name):
     name = clean_text(name).replace("-MIT", "").strip(" -")
     name = re.sub(r"^(composition of|members of|designation in)\s+", "", name, flags=re.I)
@@ -1878,6 +1966,7 @@ def clean_committee_name(name):
     if name.lower() == "working committee":
         name = "Working Committee"
     return name
+
 
 def is_valid_committee_name(name):
     if len(name) < 8:
@@ -1894,6 +1983,7 @@ def is_valid_committee_name(name):
         )
     )
 
+
 def committee_question_kind(question):
     normalized = question.lower()
     if re.search(r"\b(?:dr|mr|ms|prof)\.?\s+", normalized):
@@ -1901,6 +1991,7 @@ def committee_question_kind(question):
     if any(term in normalized for term in ["who is in", "who are in", "who is on", "who are on", "members of", "member of"]):
         return "members"
     return "names"
+
 
 def matching_committee_name(question, names):
     normalized = question.lower()
@@ -1913,6 +2004,7 @@ def matching_committee_name(question, names):
             best_name = name
             best_score = score
     return best_name
+
 
 def committee_relationships():
     relationships = {}
@@ -1935,6 +2027,7 @@ def committee_relationships():
             relationships.setdefault(key, {"person": person["name"], "committees": set(), "role": person.get("role", "")})
             relationships[key]["committees"].add(committee_name)
     return relationships
+
 
 def bounded_committee_section(chunk, committee_name):
     lines = chunk.get("content", "").splitlines()
@@ -1963,6 +2056,7 @@ def bounded_committee_section(chunk, committee_name):
             section_lines.append(line)
     return "\n".join(section_lines)
 
+
 def is_valid_committee_member_line(line):
     if re.search(r"ctc|lpa|package|placed|placement record|recruiter|highest package|b\.tech", line, re.I):
         return False
@@ -1970,6 +2064,7 @@ def is_valid_committee_member_line(line):
         re.search(r"\|\s*(?:Dr|Mr|Ms|Prof)\.?\s+|^\s*[-*]\s*(?:Dr|Mr|Ms|Prof)\.?\s+|(?:Dr|Mr|Ms|Prof)\.?\s+[A-Z]", line)
         and re.search(r"chairperson|member|officer|advisor|coordinator|director|hod|faculty|student|email|@|phone|\|", line, re.I)
     )
+
 
 def committee_answer(question):
     chunks = committee_chunks()
@@ -2017,6 +2112,7 @@ def committee_answer(question):
         "committees",
     )
 
+
 def build_aggregation_summary(question, package_records):
     agg_type = aggregation_type(question)
     if agg_type == "placement_students" and package_records:
@@ -2055,6 +2151,7 @@ def build_aggregation_summary(question, package_records):
 
     return ""
 
+
 def direct_aggregation_answer(question):
     agg_type = aggregation_type(question)
     if agg_type == "placement_students":
@@ -2064,6 +2161,7 @@ def direct_aggregation_answer(question):
             return build_aggregation_summary(question, records)
 
     return build_aggregation_summary(question, [])
+
 
 def combine_chunks(
     exact_chunk,
@@ -2099,6 +2197,7 @@ def combine_chunks(
         combined.append(chunk)
 
     return combined
+
 
 def build_context(chunks, question):
     if not chunks:
@@ -2159,6 +2258,7 @@ def build_context(chunks, question):
         )
     return truncate_text("\n\n".join(context_parts), MAX_NORMAL_CONTEXT_CHARS)
 
+
 def build_prompt(question, context):
     faculty_instruction = ""
     if "Structured faculty profile:" in context:
@@ -2194,6 +2294,7 @@ Question:
 
 Answer:"""
 
+
 def log_performance(question, retrieval_time, context_length, generation_time, total_time):
     print(f"Question: {question}")
     print(f"Retrieval Time: {retrieval_time:.2f}s")
@@ -2203,11 +2304,13 @@ def log_performance(question, retrieval_time, context_length, generation_time, t
     print(f"Generation Time: {generation_time:.2f}s")
     print(f"Total Time: {total_time:.2f}s")
 
+
 def user_key_from_request(http_request):
     forwarded_for = http_request.headers.get("x-forwarded-for", "")
     if forwarded_for:
         return forwarded_for.split(",", 1)[0].strip()
     return http_request.client.host if http_request.client else "unknown"
+
 
 def is_user_rate_limited(user_key):
     now = time.time()
@@ -2224,6 +2327,7 @@ def is_user_rate_limited(user_key):
     request_timestamps_by_user[user_key] = timestamps
     return False
 
+
 def cached_answer(question):
     cache_key = question.strip().lower()
     item = response_cache.get(cache_key)
@@ -2237,11 +2341,13 @@ def cached_answer(question):
     print("cache hit:", cache_key)
     return item["answer"]
 
+
 def save_cached_answer(question, answer):
     response_cache[question.strip().lower()] = {
         "answer": answer,
         "timestamp": time.time(),
     }
+
 
 def groq_fallback_answer(exc):
     text = f"{type(exc).__name__}: {exc}".lower()
@@ -2257,6 +2363,7 @@ def groq_fallback_answer(exc):
         return GROQ_BUSY_RESPONSE
     print("fallback response used:", GROQ_BUSY_RESPONSE)
     return GROQ_BUSY_RESPONSE
+
 
 def general_knowledge_answer(question):
     completion = groq_client.chat.completions.create(
@@ -2279,6 +2386,7 @@ def general_knowledge_answer(question):
     )
     return completion.choices[0].message.content.strip()
 
+
 def is_time_sensitive_general_question(question):
     normalized = question.lower()
     return bool(
@@ -2286,14 +2394,17 @@ def is_time_sensitive_general_question(question):
         and re.search(r"\b(movie|film|news|release|released|price|score|weather|stock|election|result)\b", normalized)
     )
 
+
 def live_search_unavailable_answer():
     return (
         "I don't have live real-time web search in this chatbot backend right now. "
         "To answer latest/current questions accurately, a web-search API needs to be added."
     )
 
+
 dataset_chunks = load_dataset_chunks()
 placement_dataset_chunks = load_placement_dataset_chunks()
+
 
 @app.get("/")
 def home():
@@ -2302,6 +2413,25 @@ def home():
         "docs": "/docs",
         "collection": COLLECTION_NAME,
     }
+
+
+@app.get("/voice/config")
+def voice_config():
+    config = vapi_voice_config()
+    return {
+        "success": config["enabled"],
+        "data": {
+            "provider": "vapi",
+            "activation": "web",
+            "public_key": config["public_key"],
+            "assistant_id": config["assistant_id"],
+            "states": ["connecting", "listening", "speaking", "ended", "error"],
+        } if config["enabled"] else None,
+        "error": None if config["enabled"] else (
+            "Missing Vapi environment variables: " + ", ".join(config["missing"])
+        ),
+    }
+
 
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception):
@@ -2316,12 +2446,14 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
         },
     )
 
+
 @app.on_event("startup")
 def startup_check_supabase():
     print("startup check: Supabase URL:", SUPABASE_URL)
     print("startup check: Storage bucket name:", STORAGE_BUCKET_NAME)
     print("startup check: embedding model:", EMBEDDING_MODEL)
     verify_supabase_connection()
+
 
 @app.post("/chat")
 def chat(request: ChatRequest, http_request: Request):
@@ -2330,8 +2462,10 @@ def chat(request: ChatRequest, http_request: Request):
     if not question:
         raise HTTPException(status_code=422, detail="Question cannot be empty.")
         
+    # Normalize 'bangalore' -> 'bengaluru' to ensure matching against the database
     question = re.sub(r"\bbangalore\b", "bengaluru", question, flags=re.I)
 
+    # 1. Decorum & Safety Filter
     def is_inappropriate_query(q):
         flagged_words = {
             "sex", "sexual", "porn", "xxx", "naked", "nude", "orgasm", "penis", 
@@ -2416,14 +2550,14 @@ def chat(request: ChatRequest, http_request: Request):
     final_chunk_limit = MAX_HYBRID_AGGREGATION_CHUNKS if broad_query else MAX_HYBRID_NORMAL_CHUNKS
 
     retrieval_start = time.perf_counter()
-    question_embedding = get_gemini_query_embedding(question)
+    question_embedding = embedding_model.encode(question).tolist()
     
     vector_chunks = []
     if supabase_client:
         try:
             response = supabase_client.rpc("match_chunks", {
                 "query_embedding": question_embedding,
-                "match_threshold": -1.0, 
+                "match_threshold": -1.0, # -1.0 Cosine similarity threshold (retrieves top matches regardless of score)
                 "match_count": semantic_limit
             }).execute()
             supabase_chunks = response.data or []
@@ -2612,7 +2746,9 @@ def chat(request: ChatRequest, http_request: Request):
     if context_length > MAX_TOTAL_CONTEXT_CHARS:
         print("WARNING: Context length exceeds normal context limit.")
 
+    # 2. Smart Fallback for Study-related / Academic queries
     if not context.strip():
+        # Check if the user is asking a general study-related or academic query
         academic_keywords = {
             "roadmap", "syllabus", "learn", "study", "exam", "prepare", "explanation", 
             "explain", "what is", "how to", "code", "programming", "mathematics", 
@@ -2657,6 +2793,7 @@ def chat(request: ChatRequest, http_request: Request):
             save_cached_answer(question, answer)
             return {"answer": answer}
         else:
+            # For college-specific questions not found in the DB
             total_time = time.perf_counter() - total_start
             log_performance(question, retrieval_time, context_length, 0.0, total_time)
             answer = "I don't have that specific MIT Bengaluru information in my database."
@@ -2724,6 +2861,7 @@ def chat(request: ChatRequest, http_request: Request):
         "answer": final_answer
     }
 
+
 @app.post("/upload")
 def upload_knowledge_file(file: UploadFile = File(...)):
     if not supabase_admin_client:
@@ -2737,6 +2875,7 @@ def upload_knowledge_file(file: UploadFile = File(...)):
             detail=f"Unsupported file format. Supported extensions: {', '.join(supported_extensions)}"
         )
         
+    # Save the file temporarily
     temp_file_path = os.path.join(BASE_DIR, file.filename)
     try:
         with open(temp_file_path, "wb") as buffer:
@@ -2744,8 +2883,10 @@ def upload_knowledge_file(file: UploadFile = File(...)):
             
         print(f"Uploaded file saved temporarily at: {temp_file_path}")
         
+        # Run single file ingestion using the admin client (which uses service_role key)
         chunks_count = ingest.ingest_single_file(temp_file_path, supabase_admin_client)
         
+        # Reload dataset chunks in memory
         global dataset_chunks, placement_dataset_chunks
         print("Knowledge base updated. Reloading in-memory chunks...")
         dataset_chunks = load_dataset_chunks()
@@ -2753,10 +2894,12 @@ def upload_knowledge_file(file: UploadFile = File(...)):
             
     except Exception as e:
         print(f"Upload and ingestion failed: {e}")
+        # Clean up file if it exists
         if os.path.exists(temp_file_path):
             os.remove(temp_file_path)
         raise HTTPException(status_code=500, detail=f"Failed to process and ingest file: {str(e)}")
         
+    # Delete temporary file
     if os.path.exists(temp_file_path):
         os.remove(temp_file_path)
         
@@ -2764,6 +2907,7 @@ def upload_knowledge_file(file: UploadFile = File(...)):
         "message": f"Successfully uploaded and ingested {file.filename}.",
         "chunks_created": chunks_count
     }
+
 
 @app.delete("/delete")
 def delete_knowledge_file(filename: str):
@@ -2776,18 +2920,22 @@ def delete_knowledge_file(filename: str):
         
     deleted_db_count = 0
     try:
+        # 1. Delete rows from the database (using admin client)
         print(f"Deleting database records for file: {filename}...")
         response = supabase_admin_client.table("mit_bengaluru_data").delete().eq("metadata->>source_file", filename).execute()
         if response.data:
             deleted_db_count = len(response.data)
             
+        # 2. Delete file from storage (using admin client)
         print(f"Deleting file from storage bucket '{STORAGE_BUCKET_NAME}': {filename}...")
         try:
             supabase_admin_client.storage.from_(STORAGE_BUCKET_NAME).remove([filename])
             print("Successfully deleted from storage.")
         except Exception as storage_err:
             print(f"WARNING: Failed to delete {filename} from storage: {storage_err}")
+            # Do not fail the request if the file is already deleted in storage but removed from DB
             
+        # 3. Reload in-memory dataset chunks
         global dataset_chunks, placement_dataset_chunks
         print("Knowledge base updated. Reloading in-memory chunks...")
         dataset_chunks = load_dataset_chunks()
@@ -2801,6 +2949,7 @@ def delete_knowledge_file(filename: str):
         "message": f"Successfully deleted {filename} from database and storage.",
         "database_records_removed": deleted_db_count
     }
+
 
 @app.get("/files")
 def list_knowledge_files():
@@ -2817,6 +2966,7 @@ def list_knowledge_files():
             if not name or name == ".placeholder":
                 continue
             
+            # Extract metadata safely
             meta = f.get("metadata") or {}
             size = meta.get("size") or f.get("size") or 0
             created_at = f.get("created_at") or f.get("updated_at") or "unknown"
