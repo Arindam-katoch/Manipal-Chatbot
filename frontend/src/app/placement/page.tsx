@@ -20,6 +20,11 @@ import {
   type Sector,
 } from "./data";
 
+// NEW: Import Recharts for the modal
+import { 
+  ComposedChart, Bar, XAxis, YAxis, Tooltip, ReferenceLine, ResponsiveContainer 
+} from 'recharts';
+
 interface StatItem {
   label: string;
   value: string;
@@ -28,6 +33,16 @@ interface StatItem {
 
 const STAT_ICONS: LucideIcon[] = [Users, Wallet, Award, Building2];
 
+// NEW: Mock data for the graph
+const mockGraphData = [
+  { student: 'Student 1', package: 6.5 },
+  { student: 'Student 2', package: 8.0 },
+  { student: 'Student 3', package: 8.5 },
+  { student: 'Student 4', package: 10.0 },
+  { student: 'Student 5', package: 12.0 },
+  { student: 'Student 6', package: 15.0 }, 
+];
+
 export default function CompaniesAndStats() {
   const [stats, setStats] = useState<StatItem[]>(defaultStats);
   const [companies] = useState(defaultCompanies);
@@ -35,6 +50,9 @@ export default function CompaniesAndStats() {
   const [sectorFilter, setSectorFilter] = useState<"All" | Sector>("All");
   const [isLive, setIsLive] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  
+  // NEW: State to control the modal
+  const [selectedCompany, setSelectedCompany] = useState<any>(null);
 
   useEffect(() => {
     async function fetchStats() {
@@ -49,7 +67,6 @@ export default function CompaniesAndStats() {
         const resJson = await res.json();
         const rootData = resJson.data || resJson;
 
-        // Match the database array format
         const recordList = Array.isArray(rootData) ? rootData : null;
 
         if (recordList && recordList.length > 0) {
@@ -82,7 +99,6 @@ export default function CompaniesAndStats() {
           setProgress({ placed, total });
           setIsLive(true);
         } else if (rootData.stats && Array.isArray(rootData.stats)) {
-          // Alternative nested format
           setStats(rootData.stats);
           setIsLive(true);
         }
@@ -100,7 +116,6 @@ export default function CompaniesAndStats() {
     (c) => sectorFilter === "All" || c.sector === sectorFilter
   );
 
-  // Offers by sector — computed from the company data (single-hue magnitude bars)
   const sectorTotals = companies.reduce<Record<string, number>>((acc, c) => {
     acc[c.sector] = (acc[c.sector] || 0) + c.placed;
     return acc;
@@ -111,7 +126,7 @@ export default function CompaniesAndStats() {
   const upcoming = calendar.slice(0, 4);
 
   return (
-    <div className="animate-fade-up">
+    <div className="animate-fade-up relative">
       {/* Page header */}
       <div className="mb-7 flex flex-wrap items-end justify-between gap-4">
         <div>
@@ -213,7 +228,11 @@ export default function CompaniesAndStats() {
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {filteredCompanies.map((c) => (
-                  <tr key={c.name} className="transition-colors hover:bg-slate-50/70">
+                  <tr 
+                    key={c.name} 
+                    onClick={() => setSelectedCompany(c)}
+                    className="transition-colors hover:bg-slate-50/70 cursor-pointer"
+                  >
                     <td className="px-5 py-3.5">
                       <div className="flex items-center gap-3">
                         <span
@@ -337,6 +356,49 @@ export default function CompaniesAndStats() {
           </section>
         </div>
       </div>
+
+      {/* NEW: Recharts Modal */}
+      {selectedCompany && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+          <div className="bg-white rounded-xl shadow-lg w-full max-w-3xl p-6 relative">
+            
+            {/* Modal Header */}
+            <div className="flex justify-between items-center mb-6">
+              <div>
+                <h2 className="text-2xl font-bold text-slate-900">{selectedCompany.name}</h2>
+                <p className="text-sm text-slate-500">Package Distribution (Mock Data)</p>
+              </div>
+              <button 
+                onClick={() => setSelectedCompany(null)}
+                className="text-slate-400 hover:text-slate-700 font-bold text-xl px-2 transition-colors"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Recharts Graph */}
+            <div className="h-80 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <ComposedChart data={mockGraphData} margin={{ top: 20, right: 30, left: 0, bottom: 0 }}>
+                  <XAxis dataKey="student" hide />
+                  <YAxis label={{ value: 'Package (LPA)', angle: -90, position: 'insideLeft', fill: '#64748b' }} />
+                  <Tooltip formatter={(value: number) => [`${value} LPA`, 'Package']} />
+                  
+                  <Bar dataKey="package" fill="#0ea5e9" radius={[4, 4, 0, 0]} />
+                  
+                  {/* Dynamic reference line using the clicked company's actual average */}
+                  <ReferenceLine 
+                    y={parseFloat(selectedCompany.avg) || 10} 
+                    stroke="#ef4444" 
+                    strokeDasharray="5 5" 
+                    label={{ position: 'top', value: `Avg: ${selectedCompany.avg} LPA`, fill: '#ef4444' }} 
+                  />
+                </ComposedChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
