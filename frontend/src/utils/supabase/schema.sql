@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS document_embeddings (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     document_id UUID REFERENCES documents(id) ON DELETE CASCADE,
     content TEXT NOT NULL,
-    embedding vector(768), -- Match gemini-embedding-001 dimensions (768)
+    embedding vector(3072), -- gemini-embedding-001 default output dimensions
     chunk_index INTEGER
 );
 
@@ -25,20 +25,17 @@ CREATE TABLE IF NOT EXISTS announcements (
     title VARCHAR(255) NOT NULL,
     content TEXT NOT NULL,
     posted_by UUID,
-    embedding vector(768), -- Match gemini-embedding-001 dimensions (768)
+    embedding vector(3072), -- gemini-embedding-001 default output dimensions
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- IVFFlat Indexes for Fast Vector Search (Cosine Similarity)
-CREATE INDEX IF NOT EXISTS idx_document_embeddings ON document_embeddings 
-USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
-
-CREATE INDEX IF NOT EXISTS idx_announcements_embeddings ON announcements 
-USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
+-- NOTE: no vector indexes — ivfflat/hnsw cap at 2000 dims and these vectors are
+-- 3072-dim. At this corpus size sequential scans are fast; if the corpus grows,
+-- switch the columns to halfvec(3072) and add an HNSW index.
 
 -- Similarity search functions for RAG retrieval (used by frontend API via Supabase RPC)
 CREATE OR REPLACE FUNCTION match_announcements(
-  query_embedding vector(768),
+  query_embedding vector(3072),
   match_threshold float,
   match_count int
 )
@@ -59,7 +56,7 @@ LANGUAGE sql STABLE AS $$
 $$;
 
 CREATE OR REPLACE FUNCTION match_document_embeddings(
-  query_embedding vector(768),
+  query_embedding vector(3072),
   match_threshold float,
   match_count int
 )
