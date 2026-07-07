@@ -185,7 +185,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
 
       if (resJson && typeof resJson === 'object') {
         const rootData = resJson.data || resJson;
-        aiText = rootData.message || rootData.response || rootData.text || JSON.stringify(resJson);
+        aiText = rootData.answer || rootData.message || rootData.response || rootData.text || JSON.stringify(resJson);
       } else {
         aiText = String(resJson);
       }
