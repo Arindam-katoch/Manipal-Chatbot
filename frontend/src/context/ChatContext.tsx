@@ -27,6 +27,9 @@ interface ChatContextType {
   sendMessage: (text: string, activeTool: string | null) => Promise<void>;
   setActiveSessionId: (id: string | null) => void;
   activeSession: ChatSession | null;
+  isInterviewOpen: boolean;
+  openInterview: () => void;
+  closeInterview: () => void;
 }
 
 const ChatContext = createContext<ChatContextType | undefined>(undefined);
@@ -36,6 +39,10 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
+  const [isInterviewOpen, setIsInterviewOpen] = useState(false);
+
+  const openInterview = () => setIsInterviewOpen(true);
+  const closeInterview = () => setIsInterviewOpen(false);
 
   // Load sessions from localStorage on mount
   useEffect(() => {
@@ -79,6 +86,16 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   const activeSession = sessions.find(s => s.id === activeSessionId) || null;
 
   const createSession = () => {
+    // If a chat with no messages already exists, don't spawn another empty one —
+    // reuse it (prefer the active chat when it's already empty).
+    const emptySession =
+      sessions.find(s => s.id === activeSessionId && s.messages.length === 0) ??
+      sessions.find(s => s.messages.length === 0);
+    if (emptySession) {
+      setActiveSessionId(emptySession.id);
+      return emptySession.id;
+    }
+
     const newId = Math.random().toString(36).substring(2, 11);
     const newSession: ChatSession = {
       id: newId,
@@ -168,7 +185,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
 
       if (resJson && typeof resJson === 'object') {
         const rootData = resJson.data || resJson;
-        aiText = rootData.message || rootData.response || rootData.text || JSON.stringify(resJson);
+        aiText = rootData.answer || rootData.message || rootData.response || rootData.text || JSON.stringify(resJson);
       } else {
         aiText = String(resJson);
       }
@@ -248,7 +265,10 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         deleteSession,
         sendMessage,
         setActiveSessionId,
-        activeSession
+        activeSession,
+        isInterviewOpen,
+        openInterview,
+        closeInterview
       }}
     >
       {children}

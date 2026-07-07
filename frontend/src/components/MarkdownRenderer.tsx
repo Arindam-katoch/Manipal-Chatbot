@@ -99,9 +99,9 @@ export default function MarkdownRenderer({ content }: MarkdownRendererProps) {
         case 'italic':
           return <em key={key} className="italic text-slate-700">{part.text}</em>;
         case 'code':
-          return <code key={key} className="bg-slate-100 text-manipal-orange px-1.5 py-0.5 rounded text-xs font-mono font-medium">{part.text}</code>;
+          return <code key={key} className="bg-brand-50 text-brand-700 px-1.5 py-0.5 rounded-md text-xs font-mono font-medium">{part.text}</code>;
         case 'link':
-          return <a key={key} href={part.href} target="_blank" rel="noopener noreferrer" className="text-manipal-orange hover:underline font-medium">{part.text}</a>;
+          return <a key={key} href={part.href} target="_blank" rel="noopener noreferrer" className="text-brand-600 hover:underline font-medium">{part.text}</a>;
         default:
           return <span key={key}>{part.text}</span>;
       }
