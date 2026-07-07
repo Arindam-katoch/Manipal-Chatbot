@@ -37,11 +37,18 @@ export default function CompaniesAndStats() {
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 4000);
+
     async function fetchStats() {
       try {
         setIsLoading(true);
         const baseUrl = process.env.NEXT_PUBLIC_API_URL || "https://manipal-chatbot.onrender.com";
-        const res = await fetch(`${baseUrl}/mock/placement-stats`);
+        const res = await fetch(`${baseUrl}/mock/placement-stats`, {
+          signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+
         if (!res.ok) {
           throw new Error(`HTTP error! status: ${res.status}`);
         }
@@ -90,10 +97,16 @@ export default function CompaniesAndStats() {
         console.warn("Failed to fetch live placement stats, using mock fallback data:", error);
       } finally {
         setIsLoading(false);
+        clearTimeout(timeoutId);
       }
     }
 
     fetchStats();
+
+    return () => {
+      controller.abort();
+      clearTimeout(timeoutId);
+    };
   }, []);
 
   const filteredCompanies = companies.filter(
