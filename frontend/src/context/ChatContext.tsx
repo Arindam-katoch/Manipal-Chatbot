@@ -136,6 +136,16 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   const sendMessage = async (text: string, activeTool: string | null) => {
     if (!activeSessionId) return;
 
+    // Conversation history for the RAG route (real turns only, capped to keep
+    // the prompt small — retrieval always uses the latest user message).
+    const history = (activeSession?.messages || [])
+      .filter(m => !m.isError)
+      .slice(-12)
+      .map(m => ({
+        role: m.sender === 'user' ? 'user' : 'assistant',
+        content: m.text,
+      }));
+
     const userMessage: Message = {
       id: Math.random().toString(36).substring(2, 11),
       sender: 'user',
@@ -164,61 +174,64 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     setIsLoading(true);
 
     try {
-      const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'https://manipal-chatbot.onrender.com';
-      const response = await fetch(`${baseUrl}/api/chat`, {
+      // Local RAG route: embeds the query, retrieves matching knowledge-base
+      // chunks + announcements from Supabase pgvector, then streams the answer.
+      const response = await fetch('/api/chat', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          message: text,
+          messages: [...history, { role: 'user', content: text }],
           tool: activeTool
         })
       });
 
-      if (!response.ok) {
+      if (!response.ok || !response.body) {
         throw new Error(`Server returned HTTP ${response.status}`);
       }
 
-      const resJson = await response.json();
+      // Stream the answer into a single AI message, created on the first chunk
+      // so the typing indicator covers retrieval + time-to-first-token.
+      const aiMessageId = Math.random().toString(36).substring(2, 11);
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
       let aiText = '';
 
-      if (resJson && typeof resJson === 'object') {
-        const rootData = resJson.data || resJson;
-        aiText = rootData.message || rootData.response || rootData.text || JSON.stringify(resJson);
-      } else {
-        aiText = String(resJson);
-      }
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const chunk = decoder.decode(value, { stream: true });
+        if (!chunk) continue;
 
-      // If placeholder response is returned, customize it to make the experience wower!
-      if (aiText === 'Placeholder.') {
-        if (activeTool === 'resume') {
-          aiText = "📄 **Resume Scanner Loaded**\n\nI've analyzed your request for Resume feedback. Please paste your resume text here, or ask about ATS optimization tips. Generally, for MIT placement drives, ensure:\n- You use clear action verbs (e.g. *Developed*, *Led*, *Optimized*)\n- Quantify results (e.g. *Improved speed by 35%*)\n- Keep format strictly single-page.";
-        } else if (activeTool === 'interview') {
-          aiText = "🎙️ **Interview Mode Activated**\n\nLet's practice your behavioral interview skills. Please answer the following question:\n\n*\"Can you describe a challenging technical project you worked on and how you resolved the obstacles?\"*";
-        } else if (activeTool === 'placement') {
-          aiText = "💼 **Placement Q&A Hub**\n\nI'm ready to answer placement queries. You can ask about:\n- Past packages at MIT B.Tech CSE/ECE/etc.\n- Dynamic syllabus or interview rounds for JP Morgan, Goldman Sachs, etc.\n- Recruitment schedule updates.";
-        } else {
-          aiText = `Hello! I am your MIT Campus Assistant. You asked: "${text}". How else can I assist you with placements, studies, or schedules today?`;
-        }
-      }
+        const isFirstChunk = aiText === '';
+        aiText += chunk;
+        const currentText = aiText;
 
-      const aiMessage: Message = {
-        id: Math.random().toString(36).substring(2, 11),
-        sender: 'ai',
-        text: aiText,
-        timestamp: new Date().toISOString()
-      };
-
-      setSessions(prev => prev.map(s => {
-        if (s.id === activeSessionId) {
+        setSessions(prev => prev.map(s => {
+          if (s.id !== activeSessionId) return s;
+          if (isFirstChunk) {
+            return {
+              ...s,
+              messages: [...s.messages, {
+                id: aiMessageId,
+                sender: 'ai' as const,
+                text: currentText,
+                timestamp: new Date().toISOString()
+              }]
+            };
+          }
           return {
             ...s,
-            messages: [...s.messages, aiMessage]
+            messages: s.messages.map(m => (m.id === aiMessageId ? { ...m, text: currentText } : m))
           };
-        }
-        return s;
-      }));
+        }));
+        if (isFirstChunk) setIsLoading(false);
+      }
+
+      if (!aiText.trim()) {
+        throw new Error('Empty response from chat API');
+      }
 
     } catch (error) {
       console.warn('API call failed, generating smart fallback response:', error);
