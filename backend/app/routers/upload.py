@@ -15,7 +15,8 @@ router = APIRouter()
 MAX_FILE_SIZE = 5 * 1024 * 1024
 ALLOWED_TYPES = ["application/pdf"]
 
-client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+_groq_api_key = os.getenv("GROQ_API_KEY")
+client = Groq(api_key=_groq_api_key) if _groq_api_key else None
 
 
 def clean_text(text: str) -> str:
@@ -24,6 +25,8 @@ def clean_text(text: str) -> str:
 
 def analyze_resume(text: str):
     try:
+        if not client:
+            return {"error": "Groq client not initialized. GROQ_API_KEY environment variable is not set."}
         prompt = f"""
         Analyze this resume and return ONLY valid JSON.
 

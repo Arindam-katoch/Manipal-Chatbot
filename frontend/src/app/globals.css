@@ -2,9 +2,61 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ── Base polish ────────────────────────────────────────────────────────── */
+html {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: #ffd9b8;
+  color: #411705;
+}
+
+/* Slim, recessive scrollbars for the light content area */
+.scroll-slim::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.scroll-slim::-webkit-scrollbar-track {
+  background: transparent;
+}
+.scroll-slim::-webkit-scrollbar-thumb {
+  background: #d3d7e0;
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+.scroll-slim::-webkit-scrollbar-thumb:hover {
+  background: #b4bac7;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+/* Dark-surface variant (sidebar, interview overlay) */
+.scroll-slim-dark::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.scroll-slim-dark::-webkit-scrollbar-track {
+  background: transparent;
+}
+.scroll-slim-dark::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+.scroll-slim-dark::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.26);
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
 /* ── Ambient orb animations ─────────────────────────────────────────────────
    Defined here in plain CSS so they're always available regardless of
-   Tailwind's JIT purge. Used in page.tsx via style={{ animation: '...' }}.
+   Tailwind's JIT purge. Used via style={{ animation: '...' }}.
 ─────────────────────────────────────────────────────────────────────────── */
 @keyframes orbDrift1 {
   0%, 100% { transform: translate(0, 0) scale(1); }
