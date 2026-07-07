@@ -141,7 +141,9 @@ export async function POST(request: NextRequest) {
 
     try {
       const queryEmbedding = await embedWithBackoff(query);
-      ({ announcements, documents } = await retrieveContext(queryEmbedding));
+      const retrieved = await retrieveContext(queryEmbedding);
+      announcements = retrieved.announcements;
+      documents = retrieved.documents;
     } catch (retrievalError) {
       console.warn('RAG retrieval failed, answering without context:', retrievalError);
     }
@@ -166,17 +168,14 @@ export async function POST(request: NextRequest) {
     const toolInstruction = tool && TOOL_INSTRUCTIONS[tool] ? `\n${TOOL_INSTRUCTIONS[tool]}\n` : '';
 
     const systemPrompt = `You are a helpful and intelligent virtual assistant for MIT Bengaluru (Campus AI).
-Use the following context to answer the user query as accurately as possible.
-If the query cannot be answered using the context, provide a polite response using your general knowledge but note the source.
+Only use the following retrieved knowledge base and announcements context to answer the user query.
+If the query cannot be answered using the context, state that the information is not available in the context. Do not use general or external knowledge.
 Ensure you format responses well using markdown structure where appropriate.
 ${toolInstruction}
-${contextStr ? `--- \nRetrieved Context:\n${contextStr}---` : 'No direct context matches found in the knowledge base.'}`;
+${contextStr ? `--- \nRetrieved Context:\n${contextStr}---` : 'No direct context matches found in the knowledge base or announcements.'}`;
 
-    // Step 4: Stream the response. Prefer Groq when configured; otherwise use
-    // Gemini, which shares the key already required for embeddings.
-    const model = process.env.GROQ_API_KEY
-      ? groq('llama-3.3-70b-versatile')
-      : google('gemini-2.5-flash');
+    // Step 4: Stream the response. Force the use of Gemini API instead of Groq.
+    const model = google('gemini-2.5-flash');
 
     const result = streamText({
       model,
