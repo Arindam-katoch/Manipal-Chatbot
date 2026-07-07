@@ -9,6 +9,8 @@ import {
   RefreshCw,
   Trash2,
   UploadCloud,
+  Eye,
+  X,
 } from "lucide-react";
 
 interface IngestedDoc {
@@ -37,6 +39,26 @@ export default function KnowledgeBasePage() {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [previewContent, setPreviewContent] = useState<{ title: string; text: string } | null>(null);
+  const [loadingPreview, setLoadingPreview] = useState(false);
+
+  const previewDoc = async (id: string) => {
+    try {
+      setLoadingPreview(true);
+      setError("");
+      const res = await fetch(`/api/documents/${id}`);
+      if (!res.ok) {
+        throw new Error("Failed to load document content");
+      }
+      const data = await res.json();
+      const text = data.chunks.map((c: any) => c.content).join("\n\n");
+      setPreviewContent({ title: data.document.title, text });
+    } catch (err: any) {
+      setError(err.message || "Could not retrieve document preview");
+    } finally {
+      setLoadingPreview(false);
+    }
+  };
 
   const fetchDocuments = async () => {
     try {
@@ -253,7 +275,15 @@ export default function KnowledgeBasePage() {
                 <span className="text-xs text-slate-500">
                   {new Date(doc.upload_timestamp).toLocaleString()}
                 </span>
-                <span className="flex justify-end">
+                <span className="flex justify-end gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => previewDoc(doc.id)}
+                    className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-800"
+                    title="Preview document"
+                  >
+                    <Eye className="h-4 w-4" />
+                  </button>
                   <button
                     type="button"
                     onClick={() => deleteDoc(doc.id)}
@@ -268,6 +298,53 @@ export default function KnowledgeBasePage() {
           </ul>
         )}
       </div>
+
+      {/* Global loading overlay for preview */}
+      {loadingPreview && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/20 backdrop-blur-[1px]">
+          <Loader2 className="h-8 w-8 animate-spin text-brand-500" />
+        </div>
+      )}
+
+      {/* Preview Modal */}
+      {previewContent && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm transition-all duration-300">
+          <div className="flex h-full max-h-[85vh] w-full max-w-3xl flex-col rounded-xl border border-slate-200 bg-white shadow-xl transition-all duration-300">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
+              <div>
+                <h3 className="text-base font-semibold text-slate-900">Document Preview</h3>
+                <p className="mt-0.5 text-xs text-slate-500 truncate max-w-[500px]" title={previewContent.title}>
+                  {previewContent.title}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPreviewContent(null)}
+                className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition-colors"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            {/* Modal Body */}
+            <div className="flex-1 overflow-y-auto p-6 scroll-slim">
+              <pre className="whitespace-pre-wrap font-sans text-sm text-slate-700 leading-relaxed">
+                {previewContent.text || <em className="text-slate-400">No content available.</em>}
+              </pre>
+            </div>
+            {/* Modal Footer */}
+            <div className="flex justify-end border-t border-slate-100 px-6 py-3.5 bg-slate-50/50 rounded-b-xl">
+              <button
+                type="button"
+                onClick={() => setPreviewContent(null)}
+                className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50 active:bg-slate-100 transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
