@@ -8,6 +8,7 @@ export interface Message {
   text: string;
   timestamp: string;
   isError?: boolean;
+  attachmentName?: string;
 }
 
 export interface ChatSession {
@@ -24,7 +25,7 @@ interface ChatContextType {
   isLoading: boolean;
   createSession: () => string;
   deleteSession: (id: string) => void;
-  sendMessage: (text: string, activeTool: string | null) => Promise<void>;
+  sendMessage: (text: string, activeTool: string | null, file?: File | null) => Promise<void>;
   setActiveSessionId: (id: string | null) => void;
   activeSession: ChatSession | null;
   isInterviewOpen: boolean;
@@ -133,8 +134,13 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     });
   };
 
-  const sendMessage = async (text: string, activeTool: string | null) => {
+  const sendMessage = async (text: string, activeTool: string | null, file?: File | null) => {
     if (!activeSessionId) return;
+
+    // A resume upload analysed by the ATS checker, vs. a normal chat turn.
+    const isResumeUpload = !!file;
+    const trimmedText = text.trim();
+    if (!trimmedText && !isResumeUpload) return;
 
     // Conversation history for the RAG route (real turns only, capped to keep
     // the prompt small — retrieval always uses the latest user message).
@@ -146,19 +152,26 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         content: m.text,
       }));
 
+    // What the user's bubble shows. For an upload with no note, use a default line.
+    const userText = isResumeUpload
+      ? (trimmedText || `Please review my resume: ${file!.name}`)
+      : text;
+
     const userMessage: Message = {
       id: Math.random().toString(36).substring(2, 11),
       sender: 'user',
-      text,
-      timestamp: new Date().toISOString()
+      text: userText,
+      timestamp: new Date().toISOString(),
+      ...(isResumeUpload ? { attachmentName: file!.name } : {}),
     };
 
     // Update session messages and set tool
     setSessions(prev => prev.map(s => {
       if (s.id === activeSessionId) {
         const isFirstMessage = s.messages.length === 0;
-        const newTitle = isFirstMessage 
-          ? (text.length > 25 ? text.substring(0, 25) + '...' : text) 
+        const titleSource = isResumeUpload ? `Resume review: ${file!.name}` : text;
+        const newTitle = isFirstMessage
+          ? (titleSource.length > 25 ? titleSource.substring(0, 25) + '...' : titleSource)
           : s.title;
 
         return {
@@ -174,20 +187,38 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     setIsLoading(true);
 
     try {
-      // Local Next.js RAG route
-      const response = await fetch('/api/chat', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          messages: [...history, { role: 'user', content: text }],
-          tool: activeTool
-        })
-      });
+      let response: Response;
+
+      if (isResumeUpload) {
+        // Resume ATS checker — send the file to the parsing + analysis route.
+        const formData = new FormData();
+        formData.append('file', file!);
+        if (trimmedText) formData.append('note', trimmedText);
+        response = await fetch('/api/resume', { method: 'POST', body: formData });
+      } else {
+        // Local Next.js RAG route
+        response = await fetch('/api/chat', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            messages: [...history, { role: 'user', content: text }],
+            tool: activeTool
+          })
+        });
+      }
 
       if (!response.ok || !response.body) {
-        throw new Error(`Server returned HTTP ${response.status}`);
+        // Surface a specific server-side reason (e.g. unreadable PDF) when present.
+        let serverError = '';
+        try {
+          const data = await response.clone().json();
+          serverError = data?.error || '';
+        } catch {
+          // response was a stream, not JSON — ignore
+        }
+        throw new Error(serverError || `Server returned HTTP ${response.status}`);
       }
 
       // Stream the answer into a single AI message, created on the first chunk
@@ -234,10 +265,13 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
 
     } catch (error) {
       console.warn('API call failed, generating smart fallback response:', error);
-      
+
       // Smart fallback response
       let fallbackText = '';
-      if (activeTool === 'resume') {
+      if (isResumeUpload) {
+        const reason = error instanceof Error ? error.message : 'The resume could not be analysed.';
+        fallbackText = `📄 **Resume review unavailable**\n\n${reason}\n\nPlease make sure you uploaded a text-based PDF (not a scanned image) and try again.`;
+      } else if (activeTool === 'resume') {
         fallbackText = "📄 **Resume Scanner (Offline Mode)**\n\nCurrently offline, but here is standard resume feedback for MIT students:\n- Use standard sections: Education, Experience, Projects, Skills.\n- Avoid rating bars for skills; list them cleanly.\n- Keep it in PDF format.";
       } else if (activeTool === 'interview') {
         fallbackText = "🎙️ **Interview Mode (Offline Mode)**\n\nLet's practice behavioral questions. Question: *\"Tell me about a time you worked in a team and faced a conflict. How did you resolve it?\"*";

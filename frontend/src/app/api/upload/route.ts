@@ -8,7 +8,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/utils/db';
 import * as XLSX from 'xlsx';
 import { embedWithBackoff } from '@/utils/embeddings';
-const pdf = require('pdf-parse');
+const { PDFParse } = require('pdf-parse');
+
+export const runtime = 'nodejs';
 
 // Helper for chunking text to max size 1000 characters, overlap 150 characters, split at nearest word/space
 function chunkText(text: string, maxSize = 1000, overlap = 150): string[] {
@@ -63,8 +65,14 @@ export async function POST(request: NextRequest) {
     if (fileType === 'pdf') {
       const arrayBuffer = await file.arrayBuffer();
       const buffer = Buffer.from(arrayBuffer);
-      const data = await pdf(buffer);
-      parsedText = data.text;
+      // pdf-parse v2 exposes a class: new PDFParse({ data }).getText().
+      const parser = new PDFParse({ data: buffer });
+      try {
+        const data = await parser.getText();
+        parsedText = data.text;
+      } finally {
+        await parser.destroy();
+      }
     } else if (['xlsx', 'xls'].includes(fileType)) {
       const arrayBuffer = await file.arrayBuffer();
       const buffer = Buffer.from(arrayBuffer);

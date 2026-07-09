@@ -1,7 +1,10 @@
 "use client";
 
 import { useState, useRef, useEffect } from 'react';
-import { ArrowUp, BookOpen, Briefcase, FileText, Mic, Square } from 'lucide-react';
+import { ArrowUp, BookOpen, Briefcase, FileText, Mic, Paperclip, Square, X } from 'lucide-react';
+
+const MAX_ATTACH_BYTES = 8 * 1024 * 1024; // 8 MB
+const ACCEPTED_EXTS = ['pdf', 'txt'];
 
 const tools = [
   {
@@ -22,7 +25,7 @@ const tools = [
 ];
 
 interface ChatInputProps {
-  onSendMessage: (text: string, activeTool: string | null) => void;
+  onSendMessage: (text: string, activeTool: string | null, file?: File | null) => void;
   isLoading: boolean;
 }
 
@@ -51,8 +54,11 @@ export default function ChatInput({ onSendMessage, isLoading }: ChatInputProps) 
   const [activeTool, setActiveTool] = useState<string | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [micError, setMicError] = useState<string | null>(null);
+  const [attachedFile, setAttachedFile] = useState<File | null>(null);
+  const [attachError, setAttachError] = useState<string | null>(null);
 
   const recognitionRef = useRef<any>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const releaseResources = () => {
     if (recognitionRef.current) {
@@ -142,16 +148,73 @@ export default function ChatInput({ onSendMessage, isLoading }: ChatInputProps) 
     setActiveTool(prev => (prev === id ? null : id));
   };
 
-  const handleSend = () => {
-    if (inputValue.trim() && !isLoading) {
-      onSendMessage(inputValue, activeTool);
-      setInputValue('');
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    // Reset so selecting the same file again re-triggers onChange.
+    e.target.value = '';
+    if (!file) return;
+
+    const ext = file.name.split('.').pop()?.toLowerCase() || '';
+    if (!ACCEPTED_EXTS.includes(ext)) {
+      setAttachError('Please upload a PDF or .txt resume.');
+      return;
     }
+    if (file.size > MAX_ATTACH_BYTES) {
+      setAttachError('That file is larger than 8 MB.');
+      return;
+    }
+
+    setAttachError(null);
+    setAttachedFile(file);
+    // Attaching a resume implies Resume Scanner mode — light up the chip.
+    setActiveTool('resume');
+  };
+
+  const removeAttachment = () => {
+    setAttachedFile(null);
+    setAttachError(null);
+  };
+
+  const canSend = (inputValue.trim().length > 0 || !!attachedFile) && !isLoading;
+
+  const handleSend = () => {
+    if (!canSend) return;
+    onSendMessage(inputValue, activeTool, attachedFile);
+    setInputValue('');
+    setAttachedFile(null);
+    setAttachError(null);
   };
 
   return (
     <div className="mx-auto w-full max-w-3xl shrink-0">
       <div className="overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-input transition-all focus-within:border-brand-300 focus-within:ring-4 focus-within:ring-brand-500/10">
+        {/* Attached-file pill */}
+        {attachedFile && (
+          <div className="flex items-center gap-2 px-4 pt-3">
+            <div className="flex max-w-full items-center gap-2 rounded-lg border border-brand-200 bg-brand-50 py-1.5 pl-2.5 pr-1.5">
+              <FileText className="h-4 w-4 shrink-0 text-brand-600" strokeWidth={2} />
+              <span className="truncate text-xs font-medium text-brand-700">{attachedFile.name}</span>
+              <button
+                type="button"
+                onClick={removeAttachment}
+                className="shrink-0 rounded-md p-0.5 text-brand-500 transition-colors hover:bg-brand-100 hover:text-brand-700"
+                title="Remove attachment"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Hidden file input */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".pdf,.txt"
+          className="hidden"
+          onChange={handleFileSelect}
+        />
+
         {/* Text input row */}
         <div className="flex items-center gap-2 px-4 pb-2 pt-3.5">
           <input
@@ -167,6 +230,10 @@ export default function ChatInput({ onSendMessage, isLoading }: ChatInputProps) 
             placeholder={
               isRecording
                 ? 'Listening... Speak now'
+                : attachedFile
+                ? 'Add a note or target role (optional), then send…'
+                : activeTool === 'resume'
+                ? 'Attach your resume (PDF) for an ATS review…'
                 : activeTool
                 ? `${tools.find(t => t.id === activeTool)?.label} mode — ask anything...`
                 : 'Ask anything about Manipal...'
@@ -175,6 +242,17 @@ export default function ChatInput({ onSendMessage, isLoading }: ChatInputProps) 
               isRecording ? 'animate-pulse font-medium text-red-500' : ''
             }`}
           />
+
+          {/* Attach Button */}
+          <button
+            type="button"
+            disabled={isLoading || isRecording}
+            onClick={() => fileInputRef.current?.click()}
+            className="rounded-xl p-2 text-slate-400 transition-all hover:bg-brand-50 hover:text-brand-600 disabled:cursor-not-allowed disabled:opacity-50"
+            title="Attach a resume (PDF)"
+          >
+            <Paperclip className="h-4 w-4" strokeWidth={2} />
+          </button>
 
           {/* Voice Button */}
           <button
@@ -206,9 +284,9 @@ export default function ChatInput({ onSendMessage, isLoading }: ChatInputProps) 
           <button
             type="button"
             onClick={handleSend}
-            disabled={!inputValue.trim() || isLoading}
+            disabled={!canSend}
             className={`rounded-xl p-2 transition-all ${
-              inputValue.trim() && !isLoading
+              canSend
                 ? 'cursor-pointer bg-brand-500 text-white hover:bg-brand-600'
                 : 'cursor-default bg-slate-100 text-slate-300'
             }`}
@@ -238,9 +316,9 @@ export default function ChatInput({ onSendMessage, isLoading }: ChatInputProps) 
           ))}
         </div>
       </div>
-      {micError ? (
+      {micError || attachError ? (
         <p className="mt-2 text-center text-[11px] text-red-500" role="alert">
-          {micError}
+          {micError || attachError}
         </p>
       ) : (
         <p className="mt-2 text-center text-[11px] text-slate-400">

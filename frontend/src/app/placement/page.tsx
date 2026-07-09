@@ -94,7 +94,11 @@ export default function CompaniesAndStats() {
           setIsLive(true);
         }
       } catch (error) {
-        console.warn("Failed to fetch live placement stats, using mock fallback data:", error);
+        if (error instanceof Error && error.name === "AbortError") {
+          // Silently handle expected fetch aborts (due to component unmounting or timeout)
+        } else {
+          console.warn("Failed to fetch live placement stats, using mock fallback data:", error);
+        }
       } finally {
         setIsLoading(false);
         clearTimeout(timeoutId);

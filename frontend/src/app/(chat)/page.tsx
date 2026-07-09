@@ -54,8 +54,8 @@ export default function Home() {
     scrollToBottom();
   }, [messages, isLoading]);
 
-  const handleSendMessage = (text: string, activeTool: string | null) => {
-    sendMessage(text, activeTool);
+  const handleSendMessage = (text: string, activeTool: string | null, file?: File | null) => {
+    sendMessage(text, activeTool, file);
   };
 
   return (
@@ -150,7 +150,17 @@ export default function Home() {
                   }`}
                 >
                   {m.sender === "user" ? (
-                    <p className="whitespace-pre-wrap text-sm leading-relaxed">{m.text}</p>
+                    <>
+                      {m.attachmentName && (
+                        <div className="mb-2 flex items-center gap-2 rounded-lg bg-white/15 px-2.5 py-1.5">
+                          <FileText className="h-4 w-4 shrink-0 text-white" strokeWidth={2} />
+                          <span className="truncate text-xs font-medium text-white">
+                            {m.attachmentName}
+                          </span>
+                        </div>
+                      )}
+                      <p className="whitespace-pre-wrap text-sm leading-relaxed">{m.text}</p>
+                    </>
                   ) : (
                     <MarkdownRenderer content={m.text} />
                   )}
