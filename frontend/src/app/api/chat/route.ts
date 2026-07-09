@@ -77,7 +77,7 @@ function rankBySimilarity(
  * SQL-side search via the match_* RPCs when schema.sql has been applied;
  * otherwise fall back to fetching the (small) corpus and ranking in-process.
  */
-async function retrieveContext(queryEmbedding: number[]) {
+async function retrieveContext(queryEmbedding: number[], docMatchCount: number = 5) {
   const [annResult, docResult] = await Promise.all([
     supabase.rpc('match_announcements', {
       query_embedding: queryEmbedding,
@@ -87,7 +87,7 @@ async function retrieveContext(queryEmbedding: number[]) {
     supabase.rpc('match_document_embeddings', {
       query_embedding: queryEmbedding,
       match_threshold: 0.5,
-      match_count: 5,
+      match_count: docMatchCount,
     }),
   ]);
 
@@ -111,7 +111,7 @@ async function retrieveContext(queryEmbedding: number[]) {
         content: row.content,
         embedding: row.embedding,
       }));
-      documents = rankBySimilarity(rows, queryEmbedding, 0.5, 5);
+      documents = rankBySimilarity(rows, queryEmbedding, 0.5, docMatchCount);
     }
   }
 
@@ -134,6 +134,11 @@ export async function POST(request: NextRequest) {
 
     const query = latestUserMessage.content;
 
+    // Detect if this is an evaluation of the ECM/curriculum syllabus's industry relevance
+    const isSyllabusQuery = /syllabus|ecm|curriculum|course plan/i.test(query);
+    const isIndustryOrImprovementQuery = /industry|improve|better|relevance|recommendation|gap|change/i.test(query);
+    const isSyllabusEvaluation = isSyllabusQuery && isIndustryOrImprovementQuery;
+
     // Steps 1+2: embed the query and run pgvector similarity searches.
     // Retrieval failures must never block an answer — degrade to no context.
     let announcements: RetrievedItem[] = [];
@@ -141,7 +146,8 @@ export async function POST(request: NextRequest) {
 
     try {
       const queryEmbedding = await embedWithBackoff(query);
-      const retrieved = await retrieveContext(queryEmbedding);
+      const docMatchCount = isSyllabusEvaluation ? 25 : 5;
+      const retrieved = await retrieveContext(queryEmbedding, docMatchCount);
       announcements = retrieved.announcements;
       documents = retrieved.documents;
     } catch (retrievalError) {
@@ -167,12 +173,35 @@ export async function POST(request: NextRequest) {
 
     const toolInstruction = tool && TOOL_INSTRUCTIONS[tool] ? `\n${TOOL_INSTRUCTIONS[tool]}\n` : '';
 
-    const systemPrompt = `You are a helpful and intelligent virtual assistant for MIT Bengaluru (Campus AI).
+    let systemPrompt = '';
+
+    if (isSyllabusEvaluation) {
+      systemPrompt = `You are an expert academic curriculum reviewer, senior systems architect, and industry consultant evaluating the Electronics and Computer Engineering (ECM) syllabus at MIT Bengaluru.
+Your goal is to provide a comprehensive, highly detailed, and elaborate analysis of how relevant the ECM syllabus is to current industry trends, and outline concrete, actionable ways to improve it.
+
+Use both the retrieved syllabus context below and your deep knowledge of modern industry standards for Electronics and Computer Engineering (software engineering, hardware design, embedded systems, IoT, AI/ML, VLSI, cloud computing, and hardware-software co-design).
+
+Provide a thorough breakdown with the following structure:
+1. **Current Industry Relevance Analysis**: Assess the alignment of the syllabus with current industry demands. Highlight areas like signal/image processing, robotics, computational intelligence, or biosensors.
+2. **Key Industry Gaps**: Identify clear areas where the syllabus lags behind modern industry practices (e.g., lack of cloud deployment, modern full-stack frameworks, practical DevOps, or modern software development workflows).
+3. **Concrete, Actionable Recommendations for Improvement**:
+   - Suggest specific additions/course upgrades (e.g. introducing Git/GitHub workflows, containerization with Docker/Kubernetes, hands-on React/Next.js/Node.js web development, or Rust/Go for systems programming).
+   - Suggest project-based learning modifications, industry collaborations, or certification integrations.
+
+Ensure your response is highly professional, detailed, and directly addresses ECM syllabus relevance and improvements. Do not give a generic or brief answer.
+
+---
+Retrieved Syllabus & Document Context:
+${contextStr || 'No direct context matches found.'}
+---`;
+    } else {
+      systemPrompt = `You are a helpful and intelligent virtual assistant for MIT Bengaluru (Campus AI).
 Only use the following retrieved knowledge base and announcements context to answer the user query.
 If the query cannot be answered using the context, state that the information is not available in the context. Do not use general or external knowledge.
 Ensure you format responses well using markdown structure where appropriate.
 ${toolInstruction}
 ${contextStr ? `--- \nRetrieved Context:\n${contextStr}---` : 'No direct context matches found in the knowledge base or announcements.'}`;
+    }
 
     // Step 4: Stream the response. Force the use of Gemini API instead of Groq.
     const model = google('gemini-2.5-flash');
