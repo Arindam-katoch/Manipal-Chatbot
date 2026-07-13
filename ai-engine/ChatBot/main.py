@@ -231,7 +231,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-embedding_model = SentenceTransformer(EMBEDDING_MODEL)
+model = SentenceTransformer(EMBEDDING_MODEL)
+
+
+def get_query_embedding(text):
+    return model.encode(text).tolist()
+
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY")
@@ -2550,7 +2555,7 @@ def chat(request: ChatRequest, http_request: Request):
     final_chunk_limit = MAX_HYBRID_AGGREGATION_CHUNKS if broad_query else MAX_HYBRID_NORMAL_CHUNKS
 
     retrieval_start = time.perf_counter()
-    question_embedding = embedding_model.encode(question).tolist()
+    question_embedding = get_query_embedding(question)
     
     vector_chunks = []
     if supabase_client:
