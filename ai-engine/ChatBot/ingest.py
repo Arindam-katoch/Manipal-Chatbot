@@ -18,6 +18,18 @@ SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY")
 STORAGE_BUCKET_NAME = "chatbot-assets"
 
+model = SentenceTransformer(EMBEDDING_MODEL)
+
+
+def get_embedding(text):
+    return model.encode(text).tolist()
+
+
+def get_embeddings_batch(texts):
+    embeddings = model.encode(texts)
+    return embeddings.tolist()
+
+
 def get_supabase_client() -> Client:
     if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
         print("ERROR: SUPABASE_URL or SUPABASE_SERVICE_KEY is missing from environment variables.")
@@ -341,9 +353,8 @@ def ingest_single_file(file_path, supabase_client=None):
         
     print(f"Extracted {len(chunks)} chunks from: {base_name}")
     print(f"Generating embeddings for: {base_name}...")
-    model = SentenceTransformer(EMBEDDING_MODEL)
     texts = [chunk["content"] for chunk in chunks]
-    embeddings = model.encode(texts, show_progress_bar=False).tolist()
+    embeddings = get_embeddings_batch(texts)
     
     # Format database rows
     db_rows = []
